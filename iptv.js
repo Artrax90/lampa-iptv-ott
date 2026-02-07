@@ -1,7 +1,7 @@
 // ==Lampa==
-// name: IPTV TiviMate Trinity
-// version: 2.0.1
-// description: Исправление пустого списка и авто-меню.
+// name: IPTV TiviMate Classic
+// version: 2.1.0
+// description: Список каналов и программа на одном экране. Без категорий.
 // author: Gemini
 // ==/Lampa==
 
@@ -10,63 +10,64 @@
 
     function IPTVComponent(object) {
         var _this = this;
-        var items = $('<div class="tivi-root"></div>');
-        var groups = {};
+        var items = $('<div class="tivi-classic"></div>');
+        var channels = [];
         
         var style = `
-            .tivi-root { display: flex; width: 100%; height: 100%; background: #080a0d; color: #fff; position: absolute; z-index: 10; font-family: sans-serif; }
-            .tivi-col { height: 100%; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid rgba(255,255,255,0.05); }
-            .tivi-left { width: 25%; background: #0c0f13; }
-            .tivi-center { width: 45%; background: radial-gradient(circle at center, #161a20 0%, #080a0d 100%); align-items: center; justify-content: center; padding: 40px; text-align: center; }
-            .tivi-right { width: 30%; background: rgba(0,0,0,0.3); border-right: none; }
+            .tivi-classic { display: flex; width: 100%; height: 100%; background: #0a0c0f; position: absolute; top:0; left:0; }
+            .tivi-list-side { width: 35%; height: 100%; border-right: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; }
+            .tivi-info-side { width: 65%; height: 100%; padding: 40px; overflow-y: auto; background: linear-gradient(to bottom, #11151a, #0a0c0f); }
+            
             .tivi-scroll { overflow-y: auto; flex-grow: 1; padding: 10px; }
-            .tivi-head { padding: 25px 15px 10px; font-size: 0.75em; color: #3498db; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; }
-            .tivi-item { padding: 13px 15px; margin-bottom: 5px; background: rgba(255,255,255,0.03); border-radius: 8px; cursor: pointer; border-left: 4px solid transparent; transition: all 0.2s; }
-            .tivi-item.focus { background: #3498db !important; border-left-color: #fff; transform: translateX(5px); }
-            .tivi-item-txt { font-size: 1.1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .tivi-big-logo { width: 240px; height: 140px; margin-bottom: 30px; display: flex; align-items: center; justify-content: center; background: #000; border-radius: 15px; overflow: hidden; }
-            .tivi-big-logo img { max-width: 90%; max-height: 90%; object-fit: contain; }
-            .tivi-title { font-size: 2.2em; font-weight: bold; margin-bottom: 15px; color: #fff; }
-            .tivi-desc { font-size: 1.2em; color: rgba(255,255,255,0.5); line-height: 1.6; }
-            .tivi-epg-row { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-            .tivi-epg-time { color: #3498db; font-weight: bold; font-size: 0.9em; margin-bottom: 3px; }
+            .tivi-head { padding: 20px; font-size: 0.8em; color: #3498db; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+            
+            .tivi-card { padding: 12px 15px; margin-bottom: 6px; background: rgba(255,255,255,0.02); border-radius: 8px; cursor: pointer; border-left: 4px solid transparent; }
+            .tivi-card.focus { background: #3498db !important; border-left-color: #fff; transform: scale(1.02); }
+            .tivi-card-name { font-size: 1.15em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            
+            .tivi-details { display: flex; flex-direction: column; align-items: flex-start; }
+            .tivi-big-logo { height: 120px; margin-bottom: 25px; border-radius: 10px; background: rgba(0,0,0,0.5); padding: 10px; }
+            .tivi-big-logo img { height: 100%; object-fit: contain; }
+            
+            .tivi-chan-title { font-size: 2.5em; font-weight: bold; margin-bottom: 10px; color: #fff; }
+            .tivi-now-title { font-size: 1.8em; color: #3498db; margin-bottom: 15px; font-weight: bold; }
+            .tivi-now-desc { font-size: 1.3em; color: rgba(255,255,255,0.6); line-height: 1.6; margin-bottom: 30px; }
+            
+            .tivi-epg-table { width: 100%; border-top: 1px solid rgba(255,255,255,0.1); pt: 20px; }
+            .tivi-epg-item { display: flex; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+            .tivi-epg-time { width: 80px; color: #3498db; font-weight: bold; font-size: 1.1em; }
+            .tivi-epg-name { flex-grow: 1; color: #fff; font-size: 1.1em; }
         `;
 
         this.create = function () {
-            if (!$('#tivi-style').length) $('head').append('<style id="tivi-style">' + style + '</style>');
+            if (!$('#tivi-style-c').length) $('head').append('<style id="tivi-style-c">' + style + '</style>');
             
-            items.append('<div class="tivi-col tivi-left"><div class="tivi-head">Меню</div><div class="tivi-scroll"></div></div>');
-            items.append('<div class="tivi-col tivi-center"><div class="tivi-title">TiviMate</div><div class="tivi-desc">Выберите категорию слева.<br>Если список пуст — проверьте URL в настройках.</div></div>');
-            items.append('<div class="tivi-col tivi-right"><div class="tivi-head">Программа</div><div class="tivi-scroll"></div></div>');
+            items.append(`
+                <div class="tivi-list-side">
+                    <div class="tivi-head">Телеканалы</div>
+                    <div class="tivi-scroll" id="tivi-channels"></div>
+                </div>
+                <div class="tivi-info-side" id="tivi-details">
+                    <div style="opacity:0.3; text-align:center; margin-top:100px;">Выберите канал из списка слева</div>
+                </div>
+            `);
 
             var url = Lampa.Storage.get('iptv_m3u_link', '');
             if (!url) this.renderSettings(); else this.load(url);
         };
 
         this.load = function (url) {
-            var _this = this;
-            // Пробуем системный прокси Лампы
             var proxy = (Lampa.Utils && Lampa.Utils.proxyUrl) ? Lampa.Utils.proxyUrl(url) : url;
-            
             $.ajax({
                 url: proxy,
                 method: 'GET',
-                timeout: 5000,
-                success: function (str) { _this.parse(str); _this.renderGroups(); },
-                error: function () {
-                    // Если не вышло через системный, пробуем CORS-proxy
-                    $.ajax({
-                        url: 'https://corsproxy.io/?' + encodeURIComponent(url),
-                        method: 'GET',
-                        success: function (str) { _this.parse(str); _this.renderGroups(); },
-                        error: function() { _this.renderSettings('Не удалось загрузить плейлист. Проверьте ссылку.'); }
-                    });
-                }
+                success: function (str) { _this.parse(str); _this.renderList(); },
+                error: function () { _this.renderSettings(); }
             });
         };
 
         this.parse = function (str) {
-            groups = { 'Все каналы': [] };
+            channels = [];
             var lines = str.split('\n'), cur = null;
             lines.forEach(function (l) {
                 l = l.trim();
@@ -75,37 +76,26 @@
                     var tid = l.match(/tvg-id="([^"]+)"/i)?.[1] || '';
                     var logo = l.match(/tvg-logo="([^"]+)"/i)?.[1] || '';
                     if(!logo && tid) logo = 'https://iptvx.one/logo/' + tid + '.png';
-                    
-                    cur = { name: name, id: tid, logo: logo, group: l.match(/group-title="([^"]+)"/i)?.[1] || 'Общие' };
+                    cur = { name: name, id: tid, logo: logo };
                 } else if (l.indexOf('http') === 0 && cur) {
                     cur.url = l;
-                    if (!groups[cur.group]) groups[cur.group] = [];
-                    groups[cur.group].push(cur);
-                    groups['Все каналы'].push(cur);
+                    channels.push(cur);
                     cur = null;
                 }
             });
         };
 
-        this.renderGroups = function () {
-            var scroll = items.find('.tivi-left .tivi-scroll').empty();
-            this.addBtn(scroll, '⚙️ НАСТРОЙКИ', function () { _this.renderSettings(); });
+        this.renderList = function () {
+            var scroll = items.find('#tivi-channels').empty();
             
-            var sorted = Object.keys(groups).sort();
-            sorted.forEach(function (g) {
-                if (g === 'Все каналы' && sorted.length > 1) return;
-                _this.addBtn(scroll, '📁 ' + g.toUpperCase(), function () { _this.renderChannels(groups[g], g); });
-            });
-            this.focus();
-        };
+            // Кнопка настроек всегда сверху
+            var settings = $('<div class="selector tivi-card"><div class="tivi-card-name">⚙️ НАСТРОЙКИ ПЛЕЙЛИСТА</div></div>');
+            settings.on('hover:enter', function() { _this.renderSettings(); });
+            scroll.append(settings);
 
-        this.renderChannels = function (list, title) {
-            var scroll = items.find('.tivi-left .tivi-scroll').empty();
-            this.addBtn(scroll, '🔙 НАЗАД', function () { _this.renderGroups(); });
-            
-            list.forEach(function (chan) {
-                var row = $('<div class="selector tivi-item"><div class="tivi-item-txt">' + chan.name + '</div></div>');
-                row.on('hover:focus', function () { _this.updateEPG(chan); });
+            channels.forEach(function (chan) {
+                var row = $('<div class="selector tivi-card"><div class="tivi-card-name">' + chan.name + '</div></div>');
+                row.on('hover:focus', function () { _this.showDetails(chan); });
                 row.on('hover:enter', function () { 
                     var p = (Lampa.Utils && Lampa.Utils.proxyUrl) ? Lampa.Utils.proxyUrl(chan.url) : chan.url;
                     Lampa.Player.play({ url: p, title: chan.name }); 
@@ -115,53 +105,56 @@
             this.focus();
         };
 
-        this.updateEPG = function (chan) {
-            var center = items.find('.tivi-center').empty();
-            var right = items.find('.tivi-right .tivi-scroll').empty();
-            var epg = { current: { title: "Нет программы", description: "Данные еще не подгрузились..." }, list: [] };
+        this.showDetails = function (chan) {
+            var info = items.find('#tivi-details').empty();
+            var epg = { current: { title: "Программа не найдена", description: "Данные EPG отсутствуют." }, list: [] };
             
             if (window.Lampa && Lampa.TV) {
                 var d = Lampa.TV.getEPG(chan.id || chan.name);
                 if (d) epg = d;
             }
 
-            center.append(`
-                <div class="tivi-big-logo"><img src="${chan.logo}" onerror="this.src='https://bylampa.github.io/img/iptv.png'"></div>
-                <div class="tivi-title">${epg.current.title}</div>
-                <div class="tivi-desc">${epg.current.description || ''}</div>
-                <div style="margin-top:30px; font-weight:bold; color:#3498db;">Нажмите OK для просмотра</div>
+            var html = $(`
+                <div class="tivi-details">
+                    <div class="tivi-big-logo"><img src="${chan.logo}" onerror="this.src='https://bylampa.github.io/img/iptv.png'"></div>
+                    <div class="tivi-chan-title">${chan.name}</div>
+                    <div class="tivi-now-title">${epg.current.title}</div>
+                    <div class="tivi-now-desc">${epg.current.description || ''}</div>
+                    <div class="tivi-epg-table"></div>
+                </div>
             `);
 
             if (epg.list && epg.list.length) {
-                epg.list.forEach(function (e) {
-                    right.append(`<div class="tivi-epg-row"><div class="tivi-epg-time">${e.time}</div><div class="tivi-epg-name">${e.title}</div></div>`);
+                epg.list.slice(0, 10).forEach(function (e) {
+                    html.find('.tivi-epg-table').append(`
+                        <div class="tivi-epg-item">
+                            <div class="tivi-epg-time">${e.time}</div>
+                            <div class="tivi-epg-name">${e.title}</div>
+                        </div>
+                    `);
                 });
             }
+
+            info.append(html);
         };
 
-        this.addBtn = function (cont, txt, action) {
-            var b = $('<div class="selector tivi-item"><div class="tivi-item-txt">' + txt + '</div></div>');
-            b.on('hover:enter', action);
-            cont.append(b);
-        };
-
-        this.renderSettings = function (err) {
-            var scroll = items.find('.tivi-left .tivi-scroll').empty();
-            if (err) scroll.append('<div style="color:#ff4757; padding:10px; font-size:0.9em;">' + err + '</div>');
-            this.addBtn(scroll, '➕ УКАЗАТЬ URL ПЛЕЙЛИСТА', function () {
-                Lampa.Input.edit({ value: Lampa.Storage.get('iptv_m3u_link', ''), free: true }, function (v) {
-                    if (v) { Lampa.Storage.set('iptv_m3u_link', v); _this.load(v); }
-                });
+        this.renderSettings = function () {
+            Lampa.Input.edit({ 
+                value: Lampa.Storage.get('iptv_m3u_link', ''), 
+                title: 'Введите ссылку на M3U плейлист',
+                free: true 
+            }, function (v) {
+                if (v) { 
+                    Lampa.Storage.set('iptv_m3u_link', v); 
+                    _this.load(v); 
+                }
             });
-            this.focus();
         };
 
         this.focus = function () {
             Lampa.Controller.enable('content');
-            setTimeout(function(){
-                var f = items.find('.selector').first();
-                if (f.length) Lampa.Controller.focus(f[0]);
-            }, 100);
+            var f = items.find('.selector').first();
+            if (f.length) Lampa.Controller.focus(f[0]);
         };
 
         this.render = function () { return items; };
