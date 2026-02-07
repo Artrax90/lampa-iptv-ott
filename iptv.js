@@ -1,7 +1,7 @@
 // ==Lampa==
-// name: IPTV TiviMate Final Fixed
-// version: 3.1.0
-// description: Stable IPTV plugin with EPG on long press and favorites inside EPG
+// name: IPTV TiviMate Final HOLD
+// version: 3.2.0
+// description: IPTV with OK=Play, HOLD OK=EPG, favorites inside EPG
 // author: Artrax90
 // ==/Lampa==
 
@@ -20,6 +20,8 @@
         var groups = {};
         var allChannels = [];
         var currentList = [];
+        var focusedChannel = null;
+        var holdBlocked = false;
 
         var EPG_URL = 'https://iptvx.one/EPG';
 
@@ -78,9 +80,10 @@
             return chan.tvg_id || normalize(chan.name);
         }
 
-        /* ================= CORE ================= */
+        /* ================= COMPONENT ================= */
 
         this.create = function () {
+            hookController();
             if (!playlists.length) addPlaylist();
             else loadActive();
         };
@@ -94,8 +97,27 @@
         };
 
         this.destroy = function () {
+            unhookController();
             root.remove();
         };
+
+        /* ================= CONTROLLER HOLD ================= */
+
+        function hookController() {
+            Lampa.Controller.listener.follow('iptv_hold', function (e) {
+                if (e.type === 'hold' && e.key === 'enter' && focusedChannel) {
+                    holdBlocked = true;
+                    openEPG(focusedChannel);
+                    return false;
+                }
+            });
+        }
+
+        function unhookController() {
+            Lampa.Controller.listener.remove('iptv_hold');
+        }
+
+        /* ================= CORE ================= */
 
         function restart() {
             Lampa.Activity.close();
@@ -227,13 +249,20 @@
                         </div>
                         <div class="tm-info">
                             <div class="tm-name">${chan.name}</div>
-                            <div class="tm-epg">OK — ▶ | LONG OK — 📘</div>
+                            <div class="tm-epg">OK — ▶ | HOLD OK — 📘</div>
                         </div>
                     </div>
                 `);
 
-                // OK — PLAY
+                row.on('hover:focus', function () {
+                    focusedChannel = chan;
+                });
+
                 row.on('hover:enter', function () {
+                    if (holdBlocked) {
+                        holdBlocked = false;
+                        return;
+                    }
                     Lampa.Player.play({
                         url: chan.url,
                         title: chan.name,
@@ -241,11 +270,6 @@
                         epg: EPG_URL,
                         epg_id: epgId(chan)
                     });
-                });
-
-                // LONG OK — EPG
-                row.on('long:enter', function () {
-                    openEPG(chan);
                 });
 
                 channelsBox.append(row);
