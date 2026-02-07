@@ -17,40 +17,35 @@
             scroll.append(items);
         };
 
-        // Рисуем страницу с полем ввода
         this.renderInputPage = function() {
             var _this = this;
             items.empty();
-            
             var ui = $(
                 '<div style="text-align:center; padding:40px;">' +
                     '<div style="font-size:1.5em; margin-bottom:20px;">Настройка плейлиста</div>' +
-                    '<div class="iptv-input-wrapper" style="max-width:500px; margin:0 auto;">' +
-                        '<input type="text" id="iptv_url_field" class="selector" style="width:100%; padding:15px; background:rgba(255,255,255,0.1); border:none; border-radius:10px; color:#fff; margin-bottom:20px; text-align:center;" placeholder="Вставьте ссылку на M3U здесь...">' +
+                    '<div class="iptv-input-wrapper" style="max-width:600px; margin:0 auto;">' +
+                        '<div class="selector" id="iptv_open_keyboard" style="width:100%; padding:15px; background:rgba(255,255,255,0.1); border-radius:10px; margin-bottom:20px; word-break:break-all;">' + (Lampa.Storage.get('iptv_m3u_link', '') || 'Нажмите, чтобы ввести ссылку') + '</div>' +
                         '<div class="selector iptv-save-btn" style="background:#fff; color:#000; padding:15px 40px; border-radius:30px; display:inline-block; font-weight:bold;">Сохранить и загрузить</div>' +
                     '</div>' +
                 '</div>'
             );
 
-            ui.find('.iptv-save-btn').on('hover:enter', function() {
-                var val = ui.find('#iptv_url_field').val();
-                if(val && val.length > 10) {
-                    Lampa.Storage.set('iptv_m3u_link', val);
-                    _this.loadPlaylist(val);
-                } else {
-                    Lampa.Noty.show('Ссылка слишком короткая или пустая');
-                }
-            });
-
-            // Позволяем вызвать экранную клавиатуру при клике на само поле
-            ui.find('#iptv_url_field').on('hover:enter', function() {
-                var el = $(this);
+            ui.find('#iptv_open_keyboard').on('hover:enter', function() {
                 Lampa.Input.edit({
-                    value: el.val(),
+                    value: Lampa.Storage.get('iptv_m3u_link', ''),
                     free: true
                 }, function(new_val) {
-                    if(new_val) el.val(new_val);
+                    if(new_val) {
+                        Lampa.Storage.set('iptv_m3u_link', new_val);
+                        ui.find('#iptv_open_keyboard').text(new_val);
+                    }
                 });
+            });
+
+            ui.find('.iptv-save-btn').on('hover:enter', function() {
+                var val = Lampa.Storage.get('iptv_m3u_link', '');
+                if(val) _this.loadPlaylist(val);
+                else Lampa.Noty.show('Сначала введите ссылку');
             });
 
             items.append(ui);
@@ -60,13 +55,24 @@
         this.loadPlaylist = function(url) {
             var _this = this;
             Lampa.Loading.show();
-            network.silent(url, function (str) {
+            
+            // Пытаемся загрузить. Если упадет по CORS - Lampa выкинет Script Error, 
+            // поэтому используем обертку прокси.
+            var clean_url = url.trim();
+            var proxy_url = Lampa.Utils.proxyUrl(clean_url);
+
+            network.silent(proxy_url, function (str) {
                 Lampa.Loading.hide();
-                _this.parse(str);
-                _this.renderGroups();
+                if(str && str.indexOf('#EXTM3U') !== -1) {
+                    _this.parse(str);
+                    _this.renderGroups();
+                } else {
+                    Lampa.Noty.show('Файл загружен, но это не M3U плейлист');
+                    _this.renderInputPage();
+                }
             }, function () {
                 Lampa.Loading.hide();
-                Lampa.Noty.show('Ошибка загрузки. Проверьте CORS или ссылку.');
+                Lampa.Noty.show('Ошибка сети. Попробуйте другую ссылку.');
                 _this.renderInputPage();
             }, false, {dataType: 'text'});
         };
@@ -98,7 +104,6 @@
         this.renderGroups = function () {
             var _this = this;
             items.empty();
-            
             var reset = Lampa.Template.get('button_category', {title: '⚙️ Сменить плейлист'});
             reset.on('hover:enter', function() { _this.renderInputPage(); });
             items.append(reset);
