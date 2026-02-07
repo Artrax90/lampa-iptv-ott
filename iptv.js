@@ -1,7 +1,7 @@
 // ==Lampa==
-// name: IPTV TiviMate Visual Fixed v2
-// version: 1.9.0
-// description: IPTV plugin (multi playlists, working favorites, working search)
+// name: IPTV TiviMate Visual Final
+// version: 2.0.0
+// description: Stable IPTV plugin (multi playlists, favorites, search)
 // author: Artrax90
 // ==/Lampa==
 
@@ -20,7 +20,6 @@
         var groups = {};
         var allChannels = [];
         var currentList = [];
-
         var pressTimer = null;
 
         /* ================= UI ================= */
@@ -77,15 +76,25 @@
                 activeIndex = playlists.length - 1;
                 Lampa.Storage.set('iptv_active_playlist', activeIndex);
 
-                loadActive();
+                restart();
             });
+        }
+
+        function restart() {
+            Lampa.Activity.close();
+            setTimeout(function () {
+                Lampa.Activity.push({
+                    title: 'IPTV',
+                    component: 'iptv_lite'
+                });
+            }, 50);
         }
 
         function showPlaylistMenu() {
             var items = playlists.map(function (p, i) {
                 return {
                     title: (i === activeIndex ? '✔ ' : '') + p.name,
-                    onClick: function () {
+                    onSelect: function () {
                         activeIndex = i;
                         Lampa.Storage.set('iptv_active_playlist', i);
                         loadActive();
@@ -95,7 +104,7 @@
 
             items.push({
                 title: '➕ Добавить плейлист',
-                onClick: function () {
+                onSelect: function () {
                     setTimeout(requestAddPlaylist, 50);
                 }
             });
@@ -112,7 +121,7 @@
                 url: pl.url,
                 success: function (str) {
                     parse(str);
-                    rebuildFavoritesGroup();
+                    rebuildFavorites();
                     renderGroups();
                 },
                 error: function () {
@@ -120,7 +129,7 @@
                         url: 'https://corsproxy.io/?' + encodeURIComponent(pl.url),
                         success: function (s) {
                             parse(s);
-                            rebuildFavoritesGroup();
+                            rebuildFavorites();
                             renderGroups();
                         },
                         error: function () {
@@ -155,7 +164,7 @@
             });
         }
 
-        function rebuildFavoritesGroup() {
+        function rebuildFavorites() {
             groups['⭐ ИЗБРАННОЕ'] = allChannels.filter(function (c) {
                 return favorites.includes(c.name);
             });
@@ -202,7 +211,7 @@
                 row.on('hover:enter', function () {
                     pressTimer = setTimeout(function () {
                         toggleFavorite(chan);
-                        rebuildFavoritesGroup();
+                        rebuildFavorites();
                         renderGroups();
                         renderList(currentList);
                     }, 700);
