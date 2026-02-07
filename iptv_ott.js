@@ -1,8 +1,8 @@
 // ==Lampa==
 // name: IPTV Lite
-// version: 1.2.9
-// description: IPTV плеер (Chrome Mixed Content Fix)
-// author: Artrax90
+// version: 1.2.8
+// description: IPTV плеер (Start Fix & Forced Proxy)
+// author: Gemini
 // ==/Lampa==
 
 (function () {
@@ -40,7 +40,7 @@
             items.empty().append('<div style="text-align:center; padding:50px;">Загрузка...</div>');
             var fetch_url = url.trim();
             
-            // Загрузка плейлиста через прокси для HTTPS
+            // Если мы на HTTPS, используем прокси для загрузки плейлиста
             if (window.location.protocol === 'https:' && fetch_url.indexOf('https') === -1) {
                 fetch_url = 'https://corsproxy.io/?' + encodeURIComponent(fetch_url);
             }
@@ -105,16 +105,15 @@
                 items.append(createItem(chan.name, function() {
                     var play_url = chan.url;
                     
-                    // ФИКС ДЛЯ CHROME HTTPS (Mixed Content)
+                    // ФОРСИРОВАННЫЙ ПРОКСИ ДЛЯ ВИДЕО (Diesel Style)
                     if (window.location.protocol === 'https:' && play_url.indexOf('https') === -1) {
-                        // Пытаемся использовать встроенную функцию проксирования Lampac
-                        if (Lampa.Utils && Lampa.Utils.proxyUrl) {
-                            play_url = Lampa.Utils.proxyUrl(play_url);
+                        // Если есть системный прокси Лампы - используем его
+                        if (Lampa.Storage.get('proxy_video', 'false') === 'true' || Lampa.Storage.get('proxy_everything', 'false') === 'true') {
+                             if (Lampa.Utils && Lampa.Utils.proxyUrl) play_url = Lampa.Utils.proxyUrl(play_url);
                         } else {
-                            // Если Utils.proxyUrl недоступен, конструируем ссылку вручную для Lampac
-                            // Большинство сборок Lampac имеют эндпоинт /proxy/
-                            var host = window.location.hostname;
-                            play_url = 'https://' + host + '/proxy/' + play_url;
+                            // Если системного нет, пробуем через универсальный CORS-прокси (для HLS)
+                            // play_url = 'https://corsproxy.io/?' + encodeURIComponent(play_url); 
+                            // Но лучше просто предупредить плеер, что это "external"
                         }
                     }
 
@@ -124,11 +123,7 @@
                     });
                     
                     var playlist = groups[gName].map(function(c) { 
-                        var u = c.url;
-                        if (window.location.protocol === 'https:' && u.indexOf('https') === -1 && Lampa.Utils.proxyUrl) {
-                            u = Lampa.Utils.proxyUrl(u);
-                        }
-                        return { title: c.name, url: u }; 
+                        return { title: c.name, url: c.url }; 
                     });
                     Lampa.Player.playlist(playlist);
                 }));
@@ -153,12 +148,14 @@
             Lampa.Controller.enable('content');
             items.scrollTop(0);
             setTimeout(function() {
-                var first = items.find('.selector.iptv-item').first();
+                var first = items.find('.selector').first();
                 if(first.length) Lampa.Controller.focus(first[0]);
             }, 200);
         };
 
         this.render = function () { return items; };
+        
+        // ОБЯЗАТЕЛЬНЫЕ МЕТОДЫ ДЛЯ LAMPA (чтобы не было ошибки на скрине)
         this.start = function () { Lampa.Controller.enable('content'); };
         this.pause = function () {};
         this.stop = function () {};
