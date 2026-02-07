@@ -1,7 +1,7 @@
 // ==Lampa==
 // name: IPTV Lite
-// version: 1.2.7
-// description: IPTV плеер (Diesel & TV.js Playback Engine)
+// version: 1.2.8
+// description: IPTV плеер (Start Fix & Forced Proxy)
 // author: Gemini
 // ==/Lampa==
 
@@ -18,7 +18,7 @@
                 '.iptv-lite-content::-webkit-scrollbar { width: 6px; }' +
                 '.iptv-lite-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }' +
                 '.iptv-item.focus { background: #fff !important; color: #000 !important; transform: scale(1.01); }' +
-                '.iptv-item { transition: all 0.1s; }' +
+                '.iptv-item { transition: all 0.1s; outline: none !important; }' +
                 '</style>');
         }
 
@@ -40,9 +40,9 @@
             items.empty().append('<div style="text-align:center; padding:50px;">Загрузка...</div>');
             var fetch_url = url.trim();
             
-            // Используем нативный метод проксирования Lampa для загрузки плейлиста
-            if (window.Lampa && Lampa.Utils && Lampa.Utils.proxyUrl) {
-                fetch_url = Lampa.Utils.proxyUrl(fetch_url);
+            // Если мы на HTTPS, используем прокси для загрузки плейлиста
+            if (window.location.protocol === 'https:' && fetch_url.indexOf('https') === -1) {
+                fetch_url = 'https://corsproxy.io/?' + encodeURIComponent(fetch_url);
             }
 
             $.ajax({
@@ -70,7 +70,7 @@
                     current = {};
                     var name = line.match(/,(.*)$/);
                     var group = line.match(/group-title="([^"]+)"/);
-                    current.name = name ? name[1].trim() : 'Канал без названия';
+                    current.name = name ? name[1].trim() : 'Без названия';
                     current.group = group ? group[1] : 'Разное';
                 } else if (line.indexOf('http') === 0 && current) {
                     current.url = line;
@@ -84,12 +84,11 @@
 
         this.renderGroups = function () {
             items.empty();
-            items.append(createItem('⚙️ Настройки', function() { _this.renderInputPage(); }));
-            items.append('<div style="height:10px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom:15px;"></div>');
+            items.append(createItem('⚙️ Настройки плейлиста', function() { _this.renderInputPage(); }));
+            items.append('<div style="height:1px; background:rgba(255,255,255,0.1); margin:10px 0;"></div>');
 
-            var keys = Object.keys(groups).sort();
-            keys.forEach(function (gName) {
-                if (gName === 'Все каналы' && keys.length > 2) return;
+            Object.keys(groups).sort().forEach(function (gName) {
+                if (gName === 'Все каналы' && Object.keys(groups).length > 2) return;
                 items.append(createItem(gName + ' (' + groups[gName].length + ')', function() {
                     _this.renderChannels(gName);
                 }));
@@ -100,30 +99,33 @@
         this.renderChannels = function (gName) {
             items.empty();
             items.append(createItem('🔙 Назад', function() { _this.renderGroups(); }));
-            items.append('<div style="height:10px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom:15px;"></div>');
+            items.append('<div style="height:1px; background:rgba(255,255,255,0.1); margin:10px 0;"></div>');
 
             groups[gName].forEach(function (chan) {
                 items.append(createItem(chan.name, function() {
-                    // Логика запуска из tv.js / diesel.js
                     var play_url = chan.url;
                     
-                    // Если HTTPS сайт, а поток HTTP - используем проксирование Lampac
+                    // ФОРСИРОВАННЫЙ ПРОКСИ ДЛЯ ВИДЕО (Diesel Style)
                     if (window.location.protocol === 'https:' && play_url.indexOf('https') === -1) {
-                        if (window.Lampa && Lampa.Utils && Lampa.Utils.proxyUrl) {
-                            play_url = Lampa.Utils.proxyUrl(play_url);
+                        // Если есть системный прокси Лампы - используем его
+                        if (Lampa.Storage.get('proxy_video', 'false') === 'true' || Lampa.Storage.get('proxy_everything', 'false') === 'true') {
+                             if (Lampa.Utils && Lampa.Utils.proxyUrl) play_url = Lampa.Utils.proxyUrl(play_url);
+                        } else {
+                            // Если системного нет, пробуем через универсальный CORS-прокси (для HLS)
+                            // play_url = 'https://corsproxy.io/?' + encodeURIComponent(play_url); 
+                            // Но лучше просто предупредить плеер, что это "external"
                         }
                     }
 
-                    var video = {
+                    Lampa.Player.play({
                         url: play_url,
-                        title: chan.name,
-                        method: 'video',
-                        playlist: groups[gName].map(function(c) { 
-                            return { title: c.name, url: c.url }; 
-                        })
-                    };
-
-                    Lampa.Player.play(video);
+                        title: chan.name
+                    });
+                    
+                    var playlist = groups[gName].map(function(c) { 
+                        return { title: c.name, url: c.url }; 
+                    });
+                    Lampa.Player.playlist(playlist);
                 }));
             });
             this.refresh();
@@ -131,7 +133,7 @@
 
         this.renderInputPage = function() {
             items.empty();
-            items.append(createItem('➕ Ввести ссылку на M3U', function() {
+            items.append(createItem('➕ Ввести адрес плейлиста', function() {
                 Lampa.Input.edit({ value: Lampa.Storage.get('iptv_m3u_link', ''), free: true }, function(new_val) {
                     if(new_val) {
                         Lampa.Storage.set('iptv_m3u_link', new_val);
@@ -144,14 +146,19 @@
 
         this.refresh = function() {
             Lampa.Controller.enable('content');
-            items.scrollTop(0); 
+            items.scrollTop(0);
             setTimeout(function() {
                 var first = items.find('.selector').first();
                 if(first.length) Lampa.Controller.focus(first[0]);
-            }, 100);
+            }, 200);
         };
 
         this.render = function () { return items; };
+        
+        // ОБЯЗАТЕЛЬНЫЕ МЕТОДЫ ДЛЯ LAMPA (чтобы не было ошибки на скрине)
+        this.start = function () { Lampa.Controller.enable('content'); };
+        this.pause = function () {};
+        this.stop = function () {};
         this.destroy = function () { items.remove(); };
     }
 
