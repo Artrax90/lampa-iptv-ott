@@ -1,7 +1,7 @@
 // ==Lampa==
 // name: IPTV Lite
-// version: 1.1.3
-// description: IPTV плеер (Fix Undefined Error)
+// version: 1.1.9
+// description: IPTV плеер (Independent UI Fix)
 // author: Gemini
 // ==/Lampa==
 
@@ -12,6 +12,16 @@
         var scroll = new Lampa.Scroll({mask: true, over: true});
         var items = $('<div class="category-full"></div>');
         var groups = {};
+
+        // Создаем свою кнопку, не зависящую от шаблонов Lampa
+        function createButton(title, callback) {
+            var btn = $('<div class="selector" style="width:100%; padding:15px 20px; background:rgba(255,255,255,0.05); margin-bottom:5px; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">' +
+                            '<span style="font-size:1.2em;">' + title + '</span>' +
+                            '<span style="opacity:0.5;">&gt;</span>' +
+                        '</div>');
+            btn.on('hover:enter', callback);
+            return btn;
+        }
 
         this.create = function () {
             var url = Lampa.Storage.get('iptv_m3u_link', '');
@@ -65,22 +75,20 @@
         this.loadPlaylist = function(url) {
             var _this = this;
             items.empty();
-            items.append('<div style="text-align:center; padding:40px;">Загрузка каналов...</div>');
+            items.append('<div id="iptv_loader" style="text-align:center; padding:40px;">Загрузка каналов...</div>');
 
             var final_url = url.trim();
-            // Используем прокси, если доступно
             if (window.Lampa && Lampa.Utils && Lampa.Utils.proxyUrl) {
                 final_url = Lampa.Utils.proxyUrl(final_url);
             }
 
-            // Используем прямой jQuery AJAX вместо Lampa.Reguest
             $.ajax({
                 url: final_url,
                 method: 'GET',
                 dataType: 'text',
-                timeout: 10000,
+                timeout: 15000,
                 success: function(str) {
-                    if (str && str.indexOf('#EXTM3U') !== -1) {
+                    if (str && (str.indexOf('#EXTM3U') !== -1 || str.indexOf('#EXTINF') !== -1)) {
                         _this.parse(str);
                         _this.renderGroups();
                     } else {
@@ -89,7 +97,7 @@
                     }
                 },
                 error: function(xhr, status, error) {
-                    Lampa.Noty.show('Ошибка: ' + (error || status || 'связь прервана'));
+                    Lampa.Noty.show('Ошибка загрузки плейлиста');
                     _this.renderInputPage();
                 }
             });
@@ -123,21 +131,16 @@
             var _this = this;
             items.empty();
             
-            var reset = Lampa.Template.get('button_category', {title: '⚙️ Настройки (M3U)'});
-            reset.on('hover:enter', function() { _this.renderInputPage(); });
-            items.append(reset);
+            // Кнопка настроек
+            items.append(createButton('⚙️ Настройки (M3U)', function() { _this.renderInputPage(); }));
+            items.append('<div style="height:20px"></div>');
 
-            var group_list = Object.keys(groups);
-            if (group_list.length === 0) {
-                items.append('<div style="text-align:center; padding:20px;">Каналы не найдены</div>');
-                return;
-            }
-
-            group_list.forEach(function (gName) {
-                if (gName === 'Все каналы' && group_list.length > 2) return;
-                var card = Lampa.Template.get('button_category', {title: gName + ' [' + groups[gName].length + ']'});
-                card.on('hover:enter', function () { _this.renderChannels(gName); });
-                items.append(card);
+            var group_names = Object.keys(groups);
+            group_names.sort().forEach(function (gName) {
+                if (gName === 'Все каналы' && group_names.length > 2) return;
+                items.append(createButton(gName + ' (' + groups[gName].length + ')', function() {
+                    _this.renderChannels(gName);
+                }));
             });
             Lampa.Controller.enable('content');
         };
@@ -145,17 +148,15 @@
         this.renderChannels = function (gName) {
             var _this = this;
             items.empty();
-            var back = Lampa.Template.get('button_category', {title: '← Назад в категории'});
-            back.on('hover:enter', function () { _this.renderGroups(); });
-            items.append(back);
+            
+            items.append(createButton('← Назад в категории', function() { _this.renderGroups(); }));
+            items.append('<div style="height:20px"></div>');
 
             groups[gName].forEach(function (chan) {
-                var card = Lampa.Template.get('button_category', {title: chan.name});
-                card.on('hover:enter', function () {
+                items.append(createButton(chan.name, function() {
                     Lampa.Player.play({ url: chan.url, title: chan.name });
                     Lampa.Player.playlist([{ url: chan.url, title: chan.name }]);
-                });
-                items.append(card);
+                }));
             });
             Lampa.Controller.enable('content');
         };
