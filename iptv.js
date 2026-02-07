@@ -1,13 +1,12 @@
 // ==Lampa==
-// name: IPTV Stable (Default Playlist OK)
-// version: 4.1.1
+// name: IPTV Stable (Default Playlist + Tizen FIX)
+// version: 4.1.2
 // author: Artrax90
 // ==/Lampa==
 
 (function () {
     'use strict';
 
-    /* ===== DEFAULT PLAYLIST ===== */
     var DEFAULT_PLAYLIST = {
         name: 'LoganetTV MEGA',
         url: 'https://raw.githubusercontent.com/loganettv/playlists/refs/heads/main/mega.m3u'
@@ -20,7 +19,6 @@
         var colE = $('<div class="iptv-col e"></div>');
         root.append(colG, colC, colE);
 
-        /* ===== STORAGE INIT ===== */
         var playlists = Lampa.Storage.get('iptv_pl', null);
         var active = Lampa.Storage.get('iptv_pl_a', 0);
         var fav = Lampa.Storage.get('iptv_fav', []);
@@ -35,27 +33,21 @@
         var groups = {};
         var all = [];
 
-        /* ===== STYLE ===== */
-        if (!$('#iptv-style-stable-ok').length) {
+        if (!$('#iptv-style-tizen-fix').length) {
             $('head').append(`
-            <style id="iptv-style-stable-ok">
+            <style id="iptv-style-tizen-fix">
             .iptv-root{display:flex;height:100vh;background:#0b0d10;color:#fff}
             .iptv-col{overflow:auto}
             .g{width:260px;padding:14px;background:#0e1116}
             .c{flex:1;padding:18px}
             .e{width:420px;padding:18px;background:#0e1116}
-
             .item{padding:14px;border-radius:12px;margin-bottom:8px;background:#15181d}
             .item.focus{background:#2962ff}
-
             .chan{display:flex;align-items:center}
-            .logo{width:64px;height:36px;background:#000;border-radius:8px;margin-right:14px;
-                  display:flex;align-items:center;justify-content:center}
+            .logo{width:64px;height:36px;background:#000;border-radius:8px;margin-right:14px;display:flex;align-items:center;justify-content:center}
             .logo img{max-width:100%;max-height:100%;object-fit:contain}
-
             .name{font-size:1.05em}
             .sub{font-size:.85em;color:#9aa0a6;margin-top:4px}
-
             .et{font-size:1.2em;margin-bottom:10px}
             .er{margin-bottom:8px;color:#cfcfcf}
             </style>
@@ -63,12 +55,14 @@
         }
 
         function focus(box){
-            Lampa.Controller.enable('content');
             var f = box.find('.selector').first();
-            if (f.length) Lampa.Controller.focus(f[0]);
-        }
+            if (!f.length) return;
 
-        /* ===== CORE ===== */
+            setTimeout(function () {
+                Lampa.Controller.enable('content');
+                Lampa.Controller.focus(f[0]);
+            }, 20);
+        }
 
         this.create = function () {
             renderGroups();
@@ -91,11 +85,7 @@
                     u = u.trim();
                     if (!u) return;
 
-                    playlists.push({
-                        name: 'Плейлист ' + (playlists.length + 1),
-                        url: u
-                    });
-
+                    playlists.push({ name: 'Плейлист ' + (playlists.length + 1), url: u });
                     Lampa.Storage.set('iptv_pl', playlists);
                     active = playlists.length - 1;
                     Lampa.Storage.set('iptv_pl_a', active);
