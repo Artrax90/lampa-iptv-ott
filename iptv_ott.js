@@ -9,7 +9,6 @@
     'use strict';
 
     function IPTVComponent(object) {
-        var network = new Lampa.Reguest();
         var scroll = new Lampa.Scroll({mask: true, over: true});
         var items = $('<div class="category-full"></div>');
         var groups = {};
@@ -32,9 +31,9 @@
             var ui = $(
                 '<div style="text-align:center; padding:40px;">' +
                     '<div style="font-size:1.5em; margin-bottom:20px;">Настройка плейлиста</div>' +
-                    '<div class="iptv-input-wrapper" style="max-width:600px; margin:0 auto;">' +
-                        '<div class="selector" id="iptv_open_keyboard" style="width:100%; padding:15px; background:rgba(255,255,255,0.1); border-radius:10px; margin-bottom:20px; word-break:break-all; min-height:50px;">' + 
-                            (current_url || 'Нажмите сюда, чтобы ввести ссылку') + 
+                    '<div style="max-width:600px; margin:0 auto;">' +
+                        '<div class="selector" id="iptv_open_keyboard" style="width:100%; padding:15px; background:rgba(255,255,255,0.1); border-radius:10px; margin-bottom:20px; word-break:break-all; min-height:50px; border: 1px solid rgba(255,255,255,0.2);">' + 
+                            (current_url || 'Нажмите, чтобы ввести ссылку') + 
                         '</div>' +
                         '<div class="selector iptv-save-btn" style="background:#fff; color:#000; padding:15px 40px; border-radius:30px; display:inline-block; font-weight:bold;">Сохранить и загрузить</div>' +
                     '</div>' +
@@ -56,7 +55,7 @@
             ui.find('.iptv-save-btn').on('hover:enter', function() {
                 var val = Lampa.Storage.get('iptv_m3u_link', '');
                 if(val) _this.loadPlaylist(val);
-                else Lampa.Noty.show('Сначала введите ссылку');
+                else Lampa.Noty.show('Введите ссылку на M3U');
             });
 
             items.append(ui);
@@ -65,26 +64,35 @@
 
         this.loadPlaylist = function(url) {
             var _this = this;
-            var clean_url = url.trim();
-            
-            // Проверка прокси для обхода CORS (Script Error)
-            var final_url = clean_url;
+            items.empty();
+            items.append('<div style="text-align:center; padding:40px;">Загрузка каналов...</div>');
+
+            var final_url = url.trim();
+            // Используем прокси, если доступно
             if (window.Lampa && Lampa.Utils && Lampa.Utils.proxyUrl) {
-                final_url = Lampa.Utils.proxyUrl(clean_url);
+                final_url = Lampa.Utils.proxyUrl(final_url);
             }
 
-            network.silent(final_url, function (str) {
-                if(str && str.indexOf('#EXTM3U') !== -1) {
-                    _this.parse(str);
-                    _this.renderGroups();
-                } else {
-                    Lampa.Noty.show('Файл загружен, но это не M3U');
+            // Используем прямой jQuery AJAX вместо Lampa.Reguest
+            $.ajax({
+                url: final_url,
+                method: 'GET',
+                dataType: 'text',
+                timeout: 10000,
+                success: function(str) {
+                    if (str && str.indexOf('#EXTM3U') !== -1) {
+                        _this.parse(str);
+                        _this.renderGroups();
+                    } else {
+                        Lampa.Noty.show('Файл не похож на M3U плейлист');
+                        _this.renderInputPage();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    Lampa.Noty.show('Ошибка: ' + (error || status || 'связь прервана'));
                     _this.renderInputPage();
                 }
-            }, function () {
-                Lampa.Noty.show('Ошибка загрузки. Проверьте ссылку.');
-                _this.renderInputPage();
-            }, false, {dataType: 'text'});
+            });
         };
 
         this.render = function () { return scroll.render(); };
@@ -99,7 +107,7 @@
                     current = {};
                     var name = line.match(/,(.*)$/);
                     var group = line.match(/group-title="([^"]+)"/);
-                    current.name = name ? name[1].trim() : 'Канал';
+                    current.name = name ? name[1].trim() : 'Без названия';
                     current.group = group ? group[1] : 'Разное';
                 } else if (line.indexOf('http') === 0 && current) {
                     current.url = line;
@@ -114,13 +122,20 @@
         this.renderGroups = function () {
             var _this = this;
             items.empty();
-            var reset = Lampa.Template.get('button_category', {title: '⚙️ Сменить плейлист'});
+            
+            var reset = Lampa.Template.get('button_category', {title: '⚙️ Настройки (M3U)'});
             reset.on('hover:enter', function() { _this.renderInputPage(); });
             items.append(reset);
 
-            Object.keys(groups).forEach(function (gName) {
-                if (gName === 'Все каналы' && Object.keys(groups).length > 2) return;
-                var card = Lampa.Template.get('button_category', {title: gName + ' (' + groups[gName].length + ')'});
+            var group_list = Object.keys(groups);
+            if (group_list.length === 0) {
+                items.append('<div style="text-align:center; padding:20px;">Каналы не найдены</div>');
+                return;
+            }
+
+            group_list.forEach(function (gName) {
+                if (gName === 'Все каналы' && group_list.length > 2) return;
+                var card = Lampa.Template.get('button_category', {title: gName + ' [' + groups[gName].length + ']'});
                 card.on('hover:enter', function () { _this.renderChannels(gName); });
                 items.append(card);
             });
@@ -130,7 +145,7 @@
         this.renderChannels = function (gName) {
             var _this = this;
             items.empty();
-            var back = Lampa.Template.get('button_category', {title: '[ Назад ]'});
+            var back = Lampa.Template.get('button_category', {title: '← Назад в категории'});
             back.on('hover:enter', function () { _this.renderGroups(); });
             items.append(back);
 
@@ -148,7 +163,7 @@
         this.pause = function () {};
         this.stop = function () {};
         this.start = function () {};
-        this.destroy = function () { network.clear(); scroll.destroy(); items.remove(); };
+        this.destroy = function () { scroll.destroy(); items.remove(); };
     }
 
     function init() {
