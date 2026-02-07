@@ -1,7 +1,7 @@
 // ==Lampa==
 // name: IPTV TiviMate Pro
-// version: 1.5.0
-// description: Дизайн TiviMate, чтение EPG из плейлиста и фикс лого
+// version: 1.5.1
+// description: Дизайн TiviMate. Фикс EPG по tvg-id и авто-логотипы.
 // author: Gemini
 // ==/Lampa==
 
@@ -14,51 +14,39 @@
         var groups = {};
         var favorites = Lampa.Storage.get('iptv_fav_list', []);
 
-        if (!$('#tivimate-style-v10').length) {
-            $('head').append('<style id="tivimate-style-v10">' +
+        if (!$('#tivimate-style-v11').length) {
+            $('head').append('<style id="tivimate-style-v11">' +
                 '.tivimate-base { width:100%; height: 100vh; overflow-y: auto; background: #0f1216; padding: 20px; box-sizing: border-box; }' +
-                '.tv-item-base { display: flex; align-items: center; padding: 10px 15px; background: rgba(255,255,255,0.03); margin-bottom: 6px; border-radius: 4px; border-left: 3px solid transparent; cursor: pointer; }' +
+                '.tv-item-base { display: flex; align-items: center; padding: 12px 18px; background: rgba(255,255,255,0.03); margin-bottom: 6px; border-radius: 6px; border-left: 4px solid transparent; cursor: pointer; }' +
                 '.tv-item-base.focus { background: rgba(52, 152, 219, 0.25) !important; border-left-color: #3498db; }' +
-                '.tv-logo-base { width: 50px; height: 32px; margin-right: 15px; background: #000; border-radius: 2px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }' +
-                '.tv-logo-base img { max-width: 90%; max-height: 90%; object-fit: contain; }' +
+                '.tv-logo-base { width: 55px; height: 35px; margin-right: 18px; background: #000; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }' +
+                '.tv-logo-base img { max-width: 100%; max-height: 100%; object-fit: contain; }' +
                 '.tv-info-base { flex: 1; overflow: hidden; }' +
-                '.tv-name-base { font-size: 1.1em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }' +
-                '.tv-epg-base { font-size: 0.85em; color: #3498db; margin-top: 2px; opacity: 0.9; }' +
-                '.tv-group-v10 { font-size: 0.8em; color: rgba(255,255,255,0.4); text-transform: uppercase; margin: 20px 0 10px 5px; }' +
-                '.activity__footer, .pwa-install, .layer--footer { display: none !important; }' +
+                '.tv-name-base { font-size: 1.2em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; font-weight: 500; }' +
+                '.tv-epg-base { font-size: 0.9em; color: #3498db; margin-top: 4px; opacity: 0.9; }' +
+                '.tv-group-v11 { font-size: 0.85em; color: rgba(255,255,255,0.3); text-transform: uppercase; margin: 25px 0 10px 5px; letter-spacing: 1px; }' +
+                '.activity__footer { display: none !important; }' +
                 '</style>');
         }
 
-        function getSafeImg(url) {
-            if (!url) return '';
-            // Если ссылка на логотип по HTTP, пропускаем через прокси Lampa
-            if (url.indexOf('https') !== 0 && Lampa.Utils && Lampa.Utils.proxyUrl) {
-                return Lampa.Utils.proxyUrl(url);
-            }
-            return url;
-        }
-
         this.create = function () {
+            // Исправляем ссылку на XMLTV для iptvx
+            if (window.Lampa && Lampa.TV) {
+                Lampa.TV.addSource('iptvx_fix', 'https://iptvx.one/epg/epg.xml.gz');
+            }
+            
             var url = Lampa.Storage.get('iptv_m3u_link', '');
             if (!url) this.renderSettings();
             else this.load(url);
         };
 
         this.load = function(url) {
-            items.html('<div style="text-align:center; padding:50px; color:#fff;">Загрузка каналов...</div>');
+            items.html('<div style="text-align:center; padding:50px; color:#fff; opacity:0.5;">Загрузка TiviMate...</div>');
             $.ajax({
-                url: url,
+                url: url.indexOf('http') === 0 ? Lampa.Utils.proxyUrl(url) : url,
                 method: 'GET',
                 success: function(str) { _this.parse(str); _this.renderMain(); },
-                error: function() { 
-                    // Если прямой запрос не прошел (CORS), пробуем через прокси
-                    $.ajax({
-                        url: Lampa.Utils.proxyUrl(url),
-                        method: 'GET',
-                        success: function(str) { _this.parse(str); _this.renderMain(); },
-                        error: function() { Lampa.Noty.show('Ошибка загрузки плейлиста'); _this.renderSettings(); }
-                    });
-                }
+                error: function() { Lampa.Noty.show('Ошибка загрузки плейлиста'); _this.renderSettings(); }
             });
         };
 
@@ -66,22 +54,22 @@
             groups = {'Все каналы': []};
             var lines = str.split('\n');
             var cur = null;
-            
-            var epg_link = str.match(/url-tvg="([^"]+)"/i);
-            if (epg_link && window.Lampa && Lampa.TV) {
-                Lampa.TV.addSource('playlist_epg', epg_link[1]);
-            }
 
             lines.forEach(function(line) {
                 line = line.trim();
                 if (line.indexOf('#EXTINF') === 0) {
                     cur = {
                         name: line.match(/,(.*)$/)?.[1].trim() || 'Без названия',
-                        logo: line.match(/(?:tvg-logo|logo|url-tvg)="([^"]+)"/i)?.[1] || '',
+                        logo: line.match(/tvg-logo="([^"]+)"/i)?.[1] || '',
+                        id: line.match(/tvg-id="([^"]+)"/i)?.[1] || '',
                         group: line.match(/group-title="([^"]+)"/i)?.[1] || 'Разное'
                     };
                 } else if (line.indexOf('http') === 0 && cur) {
                     cur.url = line;
+                    // Если логотипа нет в плейлисте, пробуем найти в базе Lampa по названию
+                    if(!cur.logo && window.Lampa && Lampa.Icon) {
+                        cur.logo = Lampa.Icon.get(cur.name);
+                    }
                     if (!groups[cur.group]) groups[cur.group] = [];
                     groups[cur.group].push(cur);
                     groups['Все каналы'].push(cur);
@@ -92,11 +80,11 @@
 
         this.renderMain = function () {
             items.empty();
-            this.drawRow('⚙️ Сменить плейлист', function() { _this.renderSettings(); });
-            items.append('<div class="tv-group-v10">Категории</div>');
+            this.drawRow('⚙️ НАСТРОЙКИ ПЛЕЙЛИСТА', function() { _this.renderSettings(); });
+            items.append('<div class="tv-group-v11">Категории</div>');
             Object.keys(groups).sort().forEach(function (g) {
                 if (g === 'Все каналы' && Object.keys(groups).length > 2) return;
-                _this.drawRow(g + ' (' + groups[g].length + ')', function() {
+                _this.drawRow(g.toUpperCase() + ' (' + groups[g].length + ')', function() {
                     _this.renderList(groups[g], g);
                 });
             });
@@ -105,18 +93,19 @@
 
         this.renderList = function (list, title) {
             items.empty();
-            this.drawRow('🔙 Назад', function() { _this.renderMain(); });
-            items.append('<div class="tv-group-v10">' + title + '</div>');
+            this.drawRow('🔙 НАЗАД', function() { _this.renderMain(); });
+            items.append('<div class="tv-group-v11">' + title + '</div>');
             
             list.forEach(function (chan) {
-                var epg_text = "Программа недоступна";
+                // Ищем EPG: сначала по ID, потом по имени
+                var epg_text = "Программа временно недоступна";
                 if (window.Lampa && Lampa.TV) {
-                    var data = Lampa.TV.getEPG(chan.name);
+                    var data = Lampa.TV.getEPG(chan.id || chan.name);
                     if (data && data.current) epg_text = data.current.title;
                 }
 
                 var row = $('<div class="selector tv-item-base">' +
-                    '<div class="tv-logo-base">' + (chan.logo ? '<img src="' + getSafeImg(chan.logo) + '">' : '<span>TV</span>') + '</div>' +
+                    '<div class="tv-logo-base">' + (chan.logo ? '<img src="' + chan.logo + '">' : '<span>TV</span>') + '</div>' +
                     '<div class="tv-info-base">' +
                         '<span class="tv-name-base">' + chan.name + '</span>' +
                         '<div class="tv-epg-base">' + epg_text + '</div>' +
@@ -138,8 +127,8 @@
         };
 
         this.renderSettings = function() {
-            items.empty().append('<div class="tv-group-v10">Настройка</div>');
-            this.drawRow('➕ Ввести URL плейлиста', function() {
+            items.empty().append('<div class="tv-group-v11">Настройка</div>');
+            this.drawRow('➕ ОБНОВИТЬ ССЫЛКУ ПЛЕЙЛИСТА', function() {
                 Lampa.Input.edit({ value: Lampa.Storage.get('iptv_m3u_link', ''), free: true }, function(v) {
                     if(v) { Lampa.Storage.set('iptv_m3u_link', v); _this.load(v); }
                 });
@@ -164,7 +153,7 @@
 
     function init() {
         Lampa.Component.add('iptv_lite', IPTVComponent);
-        var btn = $('<li class="menu__item selector" data-action="iptv_lite"><div class="menu__ico"><svg height="22" viewBox="0 0 24 24" width="22" xmlns="http://www.w3.org/2000/svg"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM8 15c0-1.66 1.34-3 3-3 .35 0 .69.07 1 .18V6h5v2h-3v7.03A3.003 3.003 0 0 1 8 15z" fill="currentColor"/></svg></div><div class="menu__text">TiviMate IPTV</div></li>');
+        var btn = $('<li class="menu__item selector" data-action="iptv_lite"><div class="menu__ico"><svg height="22" viewBox="0 0 24 24" width="22" xmlns="http://www.w3.org/2000/svg"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM8 15c0-1.66 1.34-3 3-3 .35 0 .69.07 1 .18V6h5v2h-3v7.03A3.003 3.003 0 0 1 8 15z" fill="currentColor"/></svg></div><div class="menu__text">TiviMate</div></li>');
         btn.on('hover:enter', function () { Lampa.Activity.push({ title: 'TiviMate', component: 'iptv_lite', page: 1 }); });
         $('.menu .menu__list').append(btn);
     }
