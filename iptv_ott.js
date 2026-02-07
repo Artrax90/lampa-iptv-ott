@@ -1,7 +1,7 @@
 // ==Lampa==
 // name: IPTV Lite
-// version: 1.2.0
-// description: IPTV плеер (Scroll & Playback Fix)
+// version: 1.2.1
+// description: IPTV плеер (Scroll & Playback Deep Fix)
 // author: Gemini
 // ==/Lampa==
 
@@ -12,8 +12,8 @@
         var scroll = new Lampa.Scroll({mask: true, over: true, check_bottom: true});
         var items = $('<div class="category-full"></div>');
         var groups = {};
+        var last_focus;
 
-        // Универсальная кнопка с поддержкой фокуса для скролла
         function createButton(title, callback) {
             var btn = $('<div class="selector scroll-item" style="width:100%; padding:18px 25px; background:rgba(255,255,255,0.05); margin-bottom:8px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">' +
                             '<span style="font-size:1.3em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-right:10px;">' + title + '</span>' +
@@ -25,11 +25,8 @@
 
         this.create = function () {
             var url = Lampa.Storage.get('iptv_m3u_link', '');
-            if (!url) {
-                this.renderInputPage();
-            } else {
-                this.loadPlaylist(url);
-            }
+            if (!url) this.renderInputPage();
+            else this.loadPlaylist(url);
         };
 
         this.renderInputPage = function() {
@@ -42,10 +39,10 @@
                     '<div style="font-size:1.6em; margin-bottom:30px;">Настройка IPTV</div>' +
                     '<div style="max-width:600px; margin:0 auto;">' +
                         '<div class="selector" id="iptv_open_keyboard" style="width:100%; padding:20px; background:rgba(255,255,255,0.1); border-radius:15px; margin-bottom:20px; word-break:break-all; min-height:60px; border: 1px solid rgba(255,255,255,0.2);">' + 
-                            (current_url || 'Нажмите, чтобы вставить ссылку') + 
+                            (current_url || 'Нажмите, чтобы ввести ссылку') + 
                         '</div>' +
-                        '<div class="selector iptv-save-btn" style="background:#fff; color:#000; padding:15px 40px; border-radius:30px; display:inline-block; font-weight:bold; margin: 10px;">Загрузить плейлист</div>' +
-                        (current_url ? '<div class="selector iptv-reset-btn" style="background:rgba(255,0,0,0.5); color:#fff; padding:15px 40px; border-radius:30px; display:inline-block; font-weight:bold; margin: 10px;">Очистить</div>' : '') +
+                        '<div class="selector iptv-save-btn" style="background:#fff; color:#000; padding:15px 40px; border-radius:30px; display:inline-block; font-weight:bold; margin: 10px;">Загрузить</div>' +
+                        (current_url ? '<div class="selector iptv-reset-btn" style="background:rgba(255,0,0,0.3); color:#fff; padding:15px 40px; border-radius:30px; display:inline-block; font-weight:bold; margin: 10px;">Очистить</div>' : '') +
                     '</div>' +
                 '</div>'
             );
@@ -54,15 +51,13 @@
                 Lampa.Input.edit({ value: Lampa.Storage.get('iptv_m3u_link', ''), free: true }, function(new_val) {
                     if(new_val) {
                         Lampa.Storage.set('iptv_m3u_link', new_val);
-                        ui.find('#iptv_open_keyboard').text(new_val);
+                        _this.renderInputPage();
                     }
                 });
             });
 
             ui.find('.iptv-save-btn').on('hover:enter', function() {
-                var val = Lampa.Storage.get('iptv_m3u_link', '');
-                if(val) _this.loadPlaylist(val);
-                else Lampa.Noty.show('Введите адрес плейлиста');
+                _this.loadPlaylist(Lampa.Storage.get('iptv_m3u_link', ''));
             });
 
             ui.find('.iptv-reset-btn').on('hover:enter', function() {
@@ -76,8 +71,10 @@
 
         this.loadPlaylist = function(url) {
             var _this = this;
+            if(!url) return this.renderInputPage();
+            
             items.empty();
-            items.append('<div style="text-align:center; padding:50px; font-size:1.4em;">Обработка плейлиста...</div>');
+            items.append('<div style="text-align:center; padding:50px; font-size:1.4em;">Загрузка...</div>');
 
             var final_url = url.trim();
             if (window.Lampa && Lampa.Utils && Lampa.Utils.proxyUrl) {
@@ -88,18 +85,13 @@
                 url: final_url,
                 method: 'GET',
                 dataType: 'text',
-                timeout: 20000,
+                timeout: 15000,
                 success: function(str) {
-                    if (str && (str.indexOf('#EXTM3U') !== -1 || str.indexOf('#EXTINF') !== -1)) {
-                        _this.parse(str);
-                        _this.renderGroups();
-                    } else {
-                        Lampa.Noty.show('Неверный формат файла');
-                        _this.renderInputPage();
-                    }
+                    _this.parse(str);
+                    _this.renderGroups();
                 },
                 error: function() {
-                    Lampa.Noty.show('Не удалось скачать файл');
+                    Lampa.Noty.show('Ошибка загрузки плейлиста');
                     _this.renderInputPage();
                 }
             });
@@ -130,13 +122,11 @@
         this.renderGroups = function () {
             var _this = this;
             items.empty();
-            
-            items.append(createButton('⚙️ Настройки плейлиста', function() { _this.renderInputPage(); }));
-            items.append('<div style="height:2px; background:rgba(255,255,255,0.1); margin:15px 0;"></div>');
+            items.append(createButton('⚙️ Настройки', function() { _this.renderInputPage(); }));
+            items.append('<div style="height:20px"></div>');
 
-            var group_names = Object.keys(groups);
-            group_names.sort().forEach(function (gName) {
-                if (gName === 'Все каналы' && group_names.length > 2) return;
+            Object.keys(groups).sort().forEach(function (gName) {
+                if (gName === 'Все каналы' && Object.keys(groups).length > 2) return;
                 items.append(createButton(gName + ' (' + groups[gName].length + ')', function() {
                     _this.renderChannels(gName);
                 }));
@@ -147,32 +137,37 @@
         this.renderChannels = function (gName) {
             var _this = this;
             items.empty();
-            
-            items.append(createButton('← Назад в категории', function() { _this.renderGroups(); }));
-            items.append('<div style="padding:10px; opacity:0.6; font-size:0.9em;">Категория: ' + gName + '</div>');
+            items.append(createButton('← Назад', function() { _this.renderGroups(); }));
+            items.append('<div style="height:20px"></div>');
 
             groups[gName].forEach(function (chan) {
                 items.append(createButton(chan.name, function() {
-                    var video_data = {
+                    var video = {
                         url: chan.url,
                         title: chan.name,
-                        method: 'hls' // Принудительно пробуем HLS
+                        import: true // Попытка задействовать расширенные декодеры
                     };
-                    Lampa.Player.play(video_data);
-                    Lampa.Player.playlist([video_data]);
+                    Lampa.Player.stop(); // Очистить старый сеанс
+                    Lampa.Player.play(video);
+                    Lampa.Player.playlist([video]);
                 }));
             });
             this.refreshContent();
         };
 
-        // Важная функция для активации скролла и пульта
         this.refreshContent = function() {
+            scroll.clear(); // Сбросить старое состояние скролла
             scroll.append(items);
             Lampa.Controller.enable('content');
-            // Принудительно просим скролл пересчитать высоту контента
-            setTimeout(function() {
-                scroll.update();
-            }, 100);
+            
+            // Защита от ошибки getBoundingClientRect
+            if(items.find('.selector').length) {
+                setTimeout(function() {
+                    scroll.update();
+                    // Автофокус на первый элемент, если ничего не выбрано
+                    Lampa.Controller.focus(items.find('.selector').first()[0]);
+                }, 50);
+            }
         };
 
         this.render = function () { return scroll.render(); };
