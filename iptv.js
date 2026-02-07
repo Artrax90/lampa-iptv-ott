@@ -1,7 +1,7 @@
 // ==Lampa==
-// name: IPTV TiviMate
-// version: 2.0.0
-// description: IPTV player with EPG grid, favorites and catch-up (TiviMate style)
+// name: IPTV TiviMate Stable
+// version: 2.1.0
+// description: Stable IPTV plugin (TiviMate-like UI, favorites, safe EPG)
 // author: Artrax90
 // ==/Lampa==
 
@@ -10,54 +10,51 @@
     if (!window.Lampa) return;
 
     Lampa.Extensions.add({
-        name: 'iptv_tivimate',
-        version: '2.0.0',
+        name: 'iptv_tivimate_stable',
+        version: '2.1.0',
 
         init: function () {
-            console.log('[IPTV TiviMate] init');
+            console.log('[IPTV TiviMate STABLE] init');
 
-            const KEY = 'iptv_tivimate_cfg';
-            const FAV = 'iptv_tivimate_fav';
+            const KEY_CFG = 'iptv_tm_cfg';
+            const KEY_FAV = 'iptv_tm_fav';
 
-            let cfg = Lampa.Storage.get(KEY, {
+            let cfg = Lampa.Storage.get(KEY_CFG, {
                 playlist: '',
                 epg: ''
             });
 
-            let favorites = Lampa.Storage.get(FAV, []);
+            let favorites = Lampa.Storage.get(KEY_FAV, []);
 
-            const saveCfg = () => Lampa.Storage.set(KEY, cfg);
-            const saveFav = () => Lampa.Storage.set(FAV, favorites);
+            const saveCfg = () => Lampa.Storage.set(KEY_CFG, cfg);
+            const saveFav = () => Lampa.Storage.set(KEY_FAV, favorites);
 
-            let channels = [];
             let groups = {};
-            let currentGroup = null;
+            let channels = [];
 
-            /* ================== STYLES ================== */
+            /* ====================== STYLES ====================== */
 
-            if (!document.getElementById('tivimate-style')) {
+            if (!document.getElementById('iptv-tm-style')) {
                 let style = document.createElement('style');
-                style.id = 'tivimate-style';
+                style.id = 'iptv-tm-style';
                 style.innerHTML = `
-                .tv-root{display:flex;height:100vh;background:#050607;color:#fff;font-family:Roboto,Arial}
-                .tv-groups{width:260px;background:#0b0d10;padding:15px;overflow:auto}
-                .tv-group{padding:14px;border-radius:10px;margin-bottom:8px;background:#15181d}
-                .tv-group.focus{background:#2962ff}
-                .tv-channels{flex:1;padding:20px;overflow:auto}
-                .tv-channel{display:flex;align-items:center;padding:14px;border-radius:12px;margin-bottom:10px;background:#12151a}
-                .tv-channel.focus{background:#1e232b}
-                .tv-channel img{width:64px;height:36px;background:#000;border-radius:6px;margin-right:15px}
-                .tv-name{font-size:1.1em;flex:1}
-                .tv-epg{opacity:.6;font-size:.9em;max-width:40%;white-space:nowrap;overflow:hidden}
-                .tv-epg-grid{width:360px;background:#0b0d10;padding:15px;overflow:auto}
-                .epg-item{margin-bottom:10px;padding:10px;border-radius:8px;background:#15181d}
-                .epg-now{background:#2962ff}
-                .fav{color:#ffcc00;margin-right:10px}
+                .tm-root{display:flex;height:100vh;background:#050607;color:#fff;font-family:Roboto,Arial}
+                .tm-groups{width:260px;background:#0b0d10;padding:14px;overflow:auto}
+                .tm-group{padding:14px;border-radius:10px;margin-bottom:8px;background:#15181d}
+                .tm-group.focus{background:#2962ff}
+                .tm-channels{flex:1;padding:18px;overflow:auto}
+                .tm-channel{display:flex;align-items:center;padding:14px;border-radius:12px;margin-bottom:10px;background:#12151a}
+                .tm-channel.focus{background:#1e232b}
+                .tm-channel img{width:64px;height:36px;background:#000;border-radius:6px;margin-right:14px}
+                .tm-name{font-size:1.1em;flex:1}
+                .tm-epg{opacity:.6;font-size:.9em;max-width:40%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .tm-fav{color:#ffcc00;margin-right:10px}
+                .tm-empty{opacity:.6;padding:20px}
                 `;
                 document.head.appendChild(style);
             }
 
-            /* ================== SETTINGS ================== */
+            /* ====================== SETTINGS ====================== */
 
             Lampa.Settings.add({
                 title: 'IPTV TiviMate',
@@ -72,56 +69,71 @@
                             <div class="settings__value">${cfg.playlist || 'не задан'}</div>
                         </div>
                         <div class="settings__item selector" data-t="epg">
-                            EPG (xmltv)
+                            EPG (xmltv, опционально)
                             <div class="settings__value">${cfg.epg || 'не задан'}</div>
                         </div>
                     </div>
                 `,
-                start() {
-                    this.render().find('.settings__item').on('click', e => {
-                        let t = e.currentTarget.dataset.t;
+                start: function () {
+                    this.render().find('.settings__item').on('click', function () {
+                        let t = this.dataset.t;
                         Lampa.Input.edit({
-                            title: t.toUpperCase(),
+                            title: t === 'playlist' ? 'URL M3U плейлиста' : 'URL EPG',
                             value: cfg[t],
-                            onBack: v => { cfg[t] = v; saveCfg(); }
+                            onBack: function (v) {
+                                cfg[t] = v;
+                                saveCfg();
+                            }
                         });
                     });
                     Lampa.Controller.enable('content');
                 }
             });
 
-            /* ================== ENTRY ================== */
+            /* ====================== ENTRY ====================== */
 
             Lampa.Settings.add({
                 title: 'IPTV (TiviMate)',
-                onClick() {
-                    if (!cfg.playlist) return Lampa.Noty.show('Укажи плейлист');
+                onClick: function () {
+                    if (!cfg.playlist) {
+                        Lampa.Noty.show('Укажи M3U плейлист');
+                        return;
+                    }
                     Lampa.Request.get(cfg.playlist, parseM3U);
                 }
             });
 
-            /* ================== M3U ================== */
+            /* ====================== M3U PARSER ====================== */
 
-            function parseM3U(txt) {
-                channels = [];
+            function parseM3U(text) {
                 groups = { '⭐ Избранное': [] };
+                channels = [];
 
                 let cur = null;
-                txt.split('\n').forEach(l => {
+
+                text.split('\n').forEach(function (l) {
                     l = l.trim();
-                    if (l.startsWith('#EXTINF')) {
+
+                    if (l.indexOf('#EXTINF') === 0) {
                         cur = {
                             name: l.split(',').pop(),
-                            group: (l.match(/group-title="([^"]+)"/)||[])[1] || 'Общие',
-                            logo: (l.match(/tvg-logo="([^"]+)"/)||[])[1] || '',
-                            id: (l.match(/tvg-id="([^"]+)"/)||[])[1] || '',
-                            catchup: /catchup/i.test(l)
+                            group: (l.match(/group-title="([^"]+)"/) || [,'Общие'])[1],
+                            logo: (l.match(/tvg-logo="([^"]+)"/) || [,''])[1],
+                            id: (l.match(/tvg-id="([^"]+)"/) || [,''])[1],
+                            url: ''
                         };
-                    } else if (l.startsWith('http') && cur) {
+                    }
+                    else if (l.startsWith('http') && cur) {
                         cur.url = l;
                         channels.push(cur);
-                        (groups[cur.group] = groups[cur.group] || []).push(cur);
-                        if (favorites.includes(cur.name)) groups['⭐ Избранное'].push(cur);
+
+                        if (!groups[cur.group]) groups[cur.group] = [];
+                        groups[cur.group].push(cur);
+
+                        if (favorites.includes(cur.name)) {
+                            groups['⭐ Избранное'].push(cur);
+                        }
+
                         cur = null;
                     }
                 });
@@ -129,7 +141,7 @@
                 openUI();
             }
 
-            /* ================== UI ================== */
+            /* ====================== UI ====================== */
 
             function openUI() {
                 Lampa.Activity.push({
@@ -141,79 +153,73 @@
 
             Lampa.Component.add('iptv_tm', {
                 template: `
-                <div class="tv-root">
-                    <div class="tv-groups"></div>
-                    <div class="tv-channels"></div>
-                    <div class="tv-epg-grid"></div>
-                </div>
+                    <div class="tm-root">
+                        <div class="tm-groups"></div>
+                        <div class="tm-channels"></div>
+                    </div>
                 `,
-                start() {
+                start: function () {
                     let root = this.render();
-                    let gbox = root.find('.tv-groups')[0];
-                    let cbox = root.find('.tv-channels')[0];
-                    let ebox = root.find('.tv-epg-grid')[0];
+                    let gbox = root.find('.tm-groups')[0];
+                    let cbox = root.find('.tm-channels')[0];
 
                     function drawGroups() {
                         gbox.innerHTML = '';
-                        Object.keys(groups).forEach(g => {
+                        Object.keys(groups).forEach(function (g) {
                             let el = document.createElement('div');
-                            el.className = 'selector tv-group';
+                            el.className = 'selector tm-group';
                             el.textContent = g;
-                            el.onclick = () => drawChannels(groups[g]);
+                            el.onclick = function () {
+                                drawChannels(groups[g]);
+                            };
                             gbox.appendChild(el);
                         });
                     }
 
                     function drawChannels(list) {
                         cbox.innerHTML = '';
-                        ebox.innerHTML = '';
-                        list.forEach(ch => {
+
+                        if (!list || !list.length) {
+                            let empty = document.createElement('div');
+                            empty.className = 'tm-empty';
+                            empty.textContent = 'Нет каналов';
+                            cbox.appendChild(empty);
+                            return;
+                        }
+
+                        list.forEach(function (ch) {
                             let el = document.createElement('div');
-                            el.className = 'selector tv-channel';
+                            el.className = 'selector tm-channel';
                             el.innerHTML = `
-                                <img src="${ch.logo}">
-                                <span class="fav">${favorites.includes(ch.name) ? '★' : ''}</span>
-                                <div class="tv-name">${ch.name}</div>
-                                <div class="tv-epg">Загрузка EPG…</div>
+                                <img src="${ch.logo}" onerror="this.style.display='none'">
+                                <span class="tm-fav">${favorites.includes(ch.name) ? '★' : ''}</span>
+                                <div class="tm-name">${ch.name}</div>
+                                <div class="tm-epg">EPG через плеер</div>
                             `;
-                            el.onclick = () => play(ch);
-                            el.onmouseenter = () => loadEPG(ch, ebox);
-                            el.oncontextmenu = () => toggleFav(ch);
+
+                            el.onclick = function () {
+                                Lampa.Player.play({
+                                    title: ch.name,
+                                    url: ch.url,
+                                    type: 'tv',
+                                    epg: cfg.epg || null,
+                                    epg_id: ch.id || null
+                                });
+                            };
+
+                            el.onkeydown = function (e) {
+                                if (e.keyCode === 13) { // OK
+                                    if (favorites.includes(ch.name))
+                                        favorites = favorites.filter(f => f !== ch.name);
+                                    else
+                                        favorites.push(ch.name);
+                                    saveFav();
+                                    drawGroups();
+                                    drawChannels(list);
+                                }
+                            };
+
                             cbox.appendChild(el);
-                        });
-                    }
-
-                    function toggleFav(ch) {
-                        if (favorites.includes(ch.name))
-                            favorites = favorites.filter(f => f !== ch.name);
-                        else favorites.push(ch.name);
-                        saveFav();
-                        drawGroups();
-                    }
-
-                    function play(ch, time) {
-                        Lampa.Player.play({
-                            title: ch.name,
-                            url: ch.url,
-                            type: 'tv',
-                            epg: cfg.epg,
-                            epg_id: ch.id,
-                            timeshift: time || 0
-                        });
-                    }
-
-                    function loadEPG(ch, box) {
-                        box.innerHTML = '';
-                        if (!cfg.epg || !ch.id) return;
-                        let data = Lampa.TV.getEPG(ch.id);
-                        if (!data || !data.list) return;
-
-                        data.list.slice(0, 10).forEach(p => {
-                            let el = document.createElement('div');
-                            el.className = 'epg-item' + (p.current ? ' epg-now' : '');
-                            el.textContent = p.start + ' ' + p.title;
-                            if (ch.catchup) el.onclick = () => play(ch, p.start_ts);
-                            box.appendChild(el);
                         });
                     }
 
