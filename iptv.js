@@ -1,7 +1,7 @@
 // ==Lampa==
-// name: IPTV TiviMate Visual Final Plus
-// version: 2.1.0
-// description: IPTV plugin (multi playlists, rename & delete playlists, favorites, search)
+// name: IPTV TiviMate Visual + Logos + EPG
+// version: 2.2.0
+// description: IPTV plugin with smart logos and EPG by channel name
 // author: Artrax90
 // ==/Lampa==
 
@@ -9,7 +9,6 @@
     'use strict';
 
     function IPTVComponent() {
-        var _this = this;
 
         /* ================= STATE ================= */
 
@@ -21,6 +20,8 @@
         var allChannels = [];
         var currentList = [];
         var pressTimer = null;
+
+        var EPG_URL = 'https://iptvx.one/EPG';
 
         /* ================= UI ================= */
 
@@ -40,13 +41,66 @@
             .tm-group{padding:14px;border-radius:10px;margin-bottom:8px;background:#15181d}
             .tm-group.focus{background:#2962ff}
             .tm-channels{flex:1;padding:20px;overflow:auto}
-            .tm-channel{display:flex;align-items:center;padding:14px;border-radius:12px;margin-bottom:10px;background:#12151a}
+
+            .tm-channel{
+                display:flex;
+                align-items:center;
+                padding:14px;
+                border-radius:12px;
+                margin-bottom:10px;
+                background:#12151a
+            }
             .tm-channel.focus{background:#1e232b}
-            .tm-channel img{width:64px;height:36px;background:#000;border-radius:6px;margin-right:16px}
-            .tm-name{flex:1;font-size:1.1em}
+
+            .tm-logo{
+                width:72px;
+                height:40px;
+                background:#000;
+                border-radius:8px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                margin-right:16px;
+                overflow:hidden
+            }
+            .tm-logo img{
+                max-width:90%;
+                max-height:90%;
+                object-fit:contain
+            }
+
+            .tm-info{flex:1}
+            .tm-name{font-size:1.1em}
+            .tm-epg{font-size:.85em;color:#9aa0a6;margin-top:4px}
+
             .tm-star{color:#ffcc00;margin-right:10px}
             </style>
             `);
+        }
+
+        /* ================= HELPERS ================= */
+
+        function normalizeName(name) {
+            return name
+                .toLowerCase()
+                .replace(/\(.*?\)/g, '')
+                .replace(/hd|fhd|uhd|sd/gi, '')
+                .replace(/[^\w]+/g, '')
+                .trim();
+        }
+
+        function getLogo(name) {
+            var n = normalizeName(name);
+            return [
+                'https://iptvx.one/logo/' + n + '.png',
+                'https://epg.one/logo/' + n + '.png',
+                'https://bylampa.github.io/img/iptv.png'
+            ];
+        }
+
+        function getEpgId(channel) {
+            if (channel.tvg_id) return channel.tvg_id;
+            return normalizeName(channel.name);
         }
 
         /* ================= CORE ================= */
@@ -82,43 +136,7 @@
                 Lampa.Storage.set('iptv_playlists', playlists);
                 activeIndex = playlists.length - 1;
                 Lampa.Storage.set('iptv_active_playlist', activeIndex);
-
                 restart();
-            });
-        }
-
-        function renamePlaylist(index) {
-            Lampa.Input.edit({
-                title: 'Переименовать плейлист',
-                value: playlists[index].name,
-                free: true
-            }, function (name) {
-                if (!name) return;
-                playlists[index].name = name;
-                Lampa.Storage.set('iptv_playlists', playlists);
-                restart();
-            });
-        }
-
-        function deletePlaylist(index) {
-            Lampa.Select.show({
-                title: 'Удалить плейлист?',
-                items: [
-                    {
-                        title: '❌ Отмена',
-                        onSelect: function () {}
-                    },
-                    {
-                        title: '🗑 Удалить',
-                        onSelect: function () {
-                            playlists.splice(index, 1);
-                            if (activeIndex >= playlists.length) activeIndex = 0;
-                            Lampa.Storage.set('iptv_playlists', playlists);
-                            Lampa.Storage.set('iptv_active_playlist', activeIndex);
-                            restart();
-                        }
-                    }
-                ]
             });
         }
 
@@ -127,31 +145,9 @@
                 return {
                     title: (i === activeIndex ? '✔ ' : '') + p.name,
                     onSelect: function () {
-                        Lampa.Select.show({
-                            title: p.name,
-                            items: [
-                                {
-                                    title: '▶ Открыть',
-                                    onSelect: function () {
-                                        activeIndex = i;
-                                        Lampa.Storage.set('iptv_active_playlist', i);
-                                        loadActive();
-                                    }
-                                },
-                                {
-                                    title: '✏️ Переименовать',
-                                    onSelect: function () {
-                                        setTimeout(function () { renamePlaylist(i); }, 50);
-                                    }
-                                },
-                                {
-                                    title: '🗑 Удалить',
-                                    onSelect: function () {
-                                        deletePlaylist(i);
-                                    }
-                                }
-                            ]
-                        });
+                        activeIndex = i;
+                        Lampa.Storage.set('iptv_active_playlist', i);
+                        loadActive();
                     }
                 };
             });
@@ -163,10 +159,7 @@
                 }
             });
 
-            Lampa.Select.show({
-                title: 'Плейлисты',
-                items: items
-            });
+            Lampa.Select.show({ title: 'Плейлисты', items: items });
         }
 
         function loadActive() {
@@ -197,14 +190,14 @@
         function parse(str) {
             groups = { '⭐ ИЗБРАННОЕ': [] };
             allChannels = [];
-
             var cur = null;
+
             str.split('\n').forEach(function (l) {
                 l = l.trim();
                 if (l.indexOf('#EXTINF') === 0) {
                     cur = {
                         name: l.match(/,(.*)$/)?.[1] || '',
-                        logo: l.match(/tvg-logo="([^"]+)"/i)?.[1] || '',
+                        tvg_id: l.match(/tvg-id="([^"]+)"/i)?.[1] || '',
                         group: l.match(/group-title="([^"]+)"/i)?.[1] || 'ОБЩИЕ'
                     };
                 } else if (l.indexOf('http') === 0 && cur) {
@@ -251,13 +244,19 @@
             currentList = list;
 
             list.forEach(function (chan) {
+                var logos = getLogo(chan.name);
                 var isFav = favorites.includes(chan.name);
 
                 var row = $(`
                     <div class="selector tm-channel">
-                        <img src="${chan.logo}" onerror="this.style.display='none'">
+                        <div class="tm-logo">
+                            <img src="${logos[0]}" onerror="this.src='${logos[1]}'">
+                        </div>
                         ${isFav ? '<div class="tm-star">★</div>' : '<div class="tm-star"></div>'}
-                        <div class="tm-name">${chan.name}</div>
+                        <div class="tm-info">
+                            <div class="tm-name">${chan.name}</div>
+                            <div class="tm-epg">Программа доступна в плеере</div>
+                        </div>
                     </div>
                 `);
 
@@ -274,7 +273,14 @@
                     if (pressTimer) {
                         clearTimeout(pressTimer);
                         pressTimer = null;
-                        Lampa.Player.play({ url: chan.url, title: chan.name });
+
+                        Lampa.Player.play({
+                            url: chan.url,
+                            title: chan.name,
+                            type: 'tv',
+                            epg: EPG_URL,
+                            epg_id: getEpgId(chan)
+                        });
                     }
                 });
 
@@ -301,10 +307,7 @@
             }, function (v) {
                 if (!v) return;
                 var q = v.toLowerCase();
-                var result = allChannels.filter(function (c) {
-                    return c.name.toLowerCase().includes(q);
-                });
-                renderList(result);
+                renderList(allChannels.filter(c => c.name.toLowerCase().includes(q)));
             });
         }
 
