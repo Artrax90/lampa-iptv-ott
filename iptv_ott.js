@@ -8,38 +8,52 @@
         var groups = {};
 
         this.create = function () {
-            var _this = this;
             var url = Lampa.Storage.get('iptv_m3u_link', '');
-
             if (!url) {
-                // Вместо простого текста — вызываем окно ввода сразу
-                this.askForLink();
+                this.renderInputPage();
             } else {
                 this.loadPlaylist(url);
             }
             scroll.append(items);
         };
 
-        this.askForLink = function() {
+        // Рисуем страницу с полем ввода
+        this.renderInputPage = function() {
             var _this = this;
             items.empty();
             
-            var placeholder = $('<div style="text-align:center;padding:40px;"><div style="font-size:1.5em;margin-bottom:20px">Нужна ссылка на M3U</div><div class="selector" style="background:#fff;color:#000;padding:15px 30px;border-radius:30px;display:inline-block;font-weight:bold">Ввести ссылку</div></div>');
-            
-            placeholder.on('hover:enter', function() {
+            var ui = $(
+                '<div style="text-align:center; padding:40px;">' +
+                    '<div style="font-size:1.5em; margin-bottom:20px;">Настройка плейлиста</div>' +
+                    '<div class="iptv-input-wrapper" style="max-width:500px; margin:0 auto;">' +
+                        '<input type="text" id="iptv_url_field" class="selector" style="width:100%; padding:15px; background:rgba(255,255,255,0.1); border:none; border-radius:10px; color:#fff; margin-bottom:20px; text-align:center;" placeholder="Вставьте ссылку на M3U здесь...">' +
+                        '<div class="selector iptv-save-btn" style="background:#fff; color:#000; padding:15px 40px; border-radius:30px; display:inline-block; font-weight:bold;">Сохранить и загрузить</div>' +
+                    '</div>' +
+                '</div>'
+            );
+
+            ui.find('.iptv-save-btn').on('hover:enter', function() {
+                var val = ui.find('#iptv_url_field').val();
+                if(val && val.length > 10) {
+                    Lampa.Storage.set('iptv_m3u_link', val);
+                    _this.loadPlaylist(val);
+                } else {
+                    Lampa.Noty.show('Ссылка слишком короткая или пустая');
+                }
+            });
+
+            // Позволяем вызвать экранную клавиатуру при клике на само поле
+            ui.find('#iptv_url_field').on('hover:enter', function() {
+                var el = $(this);
                 Lampa.Input.edit({
-                    value: '',
-                    title: 'Введите ссылку на M3U',
+                    value: el.val(),
                     free: true
-                }, function(new_url) {
-                    if(new_url) {
-                        Lampa.Storage.set('iptv_m3u_link', new_url);
-                        _this.loadPlaylist(new_url);
-                    }
+                }, function(new_val) {
+                    if(new_val) el.val(new_val);
                 });
             });
-            
-            items.append(placeholder);
+
+            items.append(ui);
             Lampa.Controller.enable('content');
         };
 
@@ -52,8 +66,8 @@
                 _this.renderGroups();
             }, function () {
                 Lampa.Loading.hide();
-                Lampa.Noty.show('Ошибка загрузки. Проверьте ссылку.');
-                _this.askForLink(); // Если ошибка — даем шанс ввести заново
+                Lampa.Noty.show('Ошибка загрузки. Проверьте CORS или ссылку.');
+                _this.renderInputPage();
             }, false, {dataType: 'text'});
         };
 
@@ -85,9 +99,8 @@
             var _this = this;
             items.empty();
             
-            // Кнопка смены ссылки (чтобы всегда можно было поменять)
             var reset = Lampa.Template.get('button_category', {title: '⚙️ Сменить плейлист'});
-            reset.on('hover:enter', function() { _this.askForLink(); });
+            reset.on('hover:enter', function() { _this.renderInputPage(); });
             items.append(reset);
 
             Object.keys(groups).forEach(function (gName) {
