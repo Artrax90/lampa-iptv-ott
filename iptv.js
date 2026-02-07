@@ -1,7 +1,7 @@
 // ==Lampa==
-// name: IPTV TiviMate Visual Final
-// version: 2.0.0
-// description: Stable IPTV plugin (multi playlists, favorites, search)
+// name: IPTV TiviMate Visual Final Plus
+// version: 2.1.0
+// description: IPTV plugin (multi playlists, rename & delete playlists, favorites, search)
 // author: Artrax90
 // ==/Lampa==
 
@@ -59,6 +59,13 @@
             }
         };
 
+        function restart() {
+            Lampa.Activity.close();
+            setTimeout(function () {
+                Lampa.Activity.push({ title: 'IPTV', component: 'iptv_lite' });
+            }, 50);
+        }
+
         function requestAddPlaylist() {
             Lampa.Input.edit({
                 title: 'Добавить плейлист (URL)',
@@ -80,14 +87,39 @@
             });
         }
 
-        function restart() {
-            Lampa.Activity.close();
-            setTimeout(function () {
-                Lampa.Activity.push({
-                    title: 'IPTV',
-                    component: 'iptv_lite'
-                });
-            }, 50);
+        function renamePlaylist(index) {
+            Lampa.Input.edit({
+                title: 'Переименовать плейлист',
+                value: playlists[index].name,
+                free: true
+            }, function (name) {
+                if (!name) return;
+                playlists[index].name = name;
+                Lampa.Storage.set('iptv_playlists', playlists);
+                restart();
+            });
+        }
+
+        function deletePlaylist(index) {
+            Lampa.Select.show({
+                title: 'Удалить плейлист?',
+                items: [
+                    {
+                        title: '❌ Отмена',
+                        onSelect: function () {}
+                    },
+                    {
+                        title: '🗑 Удалить',
+                        onSelect: function () {
+                            playlists.splice(index, 1);
+                            if (activeIndex >= playlists.length) activeIndex = 0;
+                            Lampa.Storage.set('iptv_playlists', playlists);
+                            Lampa.Storage.set('iptv_active_playlist', activeIndex);
+                            restart();
+                        }
+                    }
+                ]
+            });
         }
 
         function showPlaylistMenu() {
@@ -95,9 +127,31 @@
                 return {
                     title: (i === activeIndex ? '✔ ' : '') + p.name,
                     onSelect: function () {
-                        activeIndex = i;
-                        Lampa.Storage.set('iptv_active_playlist', i);
-                        loadActive();
+                        Lampa.Select.show({
+                            title: p.name,
+                            items: [
+                                {
+                                    title: '▶ Открыть',
+                                    onSelect: function () {
+                                        activeIndex = i;
+                                        Lampa.Storage.set('iptv_active_playlist', i);
+                                        loadActive();
+                                    }
+                                },
+                                {
+                                    title: '✏️ Переименовать',
+                                    onSelect: function () {
+                                        setTimeout(function () { renamePlaylist(i); }, 50);
+                                    }
+                                },
+                                {
+                                    title: '🗑 Удалить',
+                                    onSelect: function () {
+                                        deletePlaylist(i);
+                                    }
+                                }
+                            ]
+                        });
                     }
                 };
             });
@@ -145,7 +199,6 @@
             allChannels = [];
 
             var cur = null;
-
             str.split('\n').forEach(function (l) {
                 l = l.trim();
                 if (l.indexOf('#EXTINF') === 0) {
