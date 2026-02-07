@@ -1,6 +1,6 @@
 // ==Lampa==
-// name: IPTV ControllerCollection TV
-// version: 7.0.0
+// name: IPTV Stable TV (ControllerCollection FIX)
+// version: 7.0.1
 // author: Artrax90
 // ==/Lampa==
 
@@ -21,11 +21,10 @@
 
         var playlists = Lampa.Storage.get('iptv_pl', []);
         var active = Lampa.Storage.get('iptv_pl_a', 0);
-        var favorites = Lampa.Storage.get('iptv_fav', []);
         var groups = {};
-        var channels = [];
+        var currentList = [];
         var current = null;
-        var controller;
+        var controller = null;
 
         if (!playlists.length) {
             playlists = [DEFAULT_PLAYLIST];
@@ -63,16 +62,12 @@
         };
 
         this.start = function () {
-            enableController();
+            if (controller) controller.enable();
         };
 
         this.destroy = function () {
             if (controller) controller.destroy();
         };
-
-        function enableController() {
-            if (controller) controller.enable();
-        }
 
         function loadPlaylist() {
             $.ajax({
@@ -86,7 +81,6 @@
 
         function parseM3U(text) {
             groups = {};
-            channels = [];
             var cur = null;
 
             text.split('\n').forEach(function (l) {
@@ -100,7 +94,6 @@
                     };
                 } else if (l.indexOf('http') === 0 && cur) {
                     cur.url = l;
-                    channels.push(cur);
                     if (!groups[cur.group]) groups[cur.group] = [];
                     groups[cur.group].push(cur);
                     cur = null;
@@ -116,7 +109,7 @@
             colE.empty();
 
             Object.keys(groups).forEach(function (g) {
-                $('<div class="item selector" data-group="' + g + '">' + g + '</div>').appendTo(colG);
+                colG.append('<div class="item selector" data-group="' + g + '">' + g + '</div>');
             });
 
             initController();
@@ -125,29 +118,26 @@
         function renderChannels(list) {
             colC.empty();
             colE.empty();
+            currentList = list;
             current = null;
 
             list.forEach(function (c, i) {
                 var logo = c.logo || (c.id ? 'https://iptvx.one/logo/' + c.id + '.png' : 'https://bylampa.github.io/img/iptv.png');
-                var row = $(`
+                colC.append(`
                     <div class="item selector chan" data-index="${i}">
-                        <div class="logo"><img src="${logo}"></div>
+                        <div class="logo"><img src="${logo}" onerror="this.src='https://bylampa.github.io/img/iptv.png'"></div>
                         <div>
                             <div class="name">${c.name}</div>
                             <div class="sub">OK ▶</div>
                         </div>
                     </div>
                 `);
-                row.find('img').on('error', function () {
-                    this.src = 'https://bylampa.github.io/img/iptv.png';
-                });
-                colC.append(row);
             });
         }
 
         function updateEPG(c) {
             colE.empty();
-            $('<div class="et">' + c.name + '</div>').appendTo(colE);
+            colE.append('<div class="et">' + c.name + '</div>');
 
             var txt = 'Программа появится после запуска канала';
             try {
@@ -157,7 +147,7 @@
                 }
             } catch (e) {}
 
-            $('<div class="er">' + txt + '</div>').appendTo(colE);
+            colE.append('<div class="er">' + txt + '</div>');
         }
 
         function initController() {
@@ -170,7 +160,7 @@
             });
 
             controller.add({
-                selector: colG.find('.selector'),
+                selector: '.g .selector',
                 enter: function (el) {
                     var g = el.data('group');
                     renderChannels(groups[g]);
@@ -179,11 +169,11 @@
             });
 
             controller.add({
-                selector: colC,
+                selector: '.c',
                 children: '.selector',
                 focus: function (el) {
                     var idx = parseInt(el.data('index'));
-                    current = groups[Object.keys(groups)[0]][idx] || channels[idx];
+                    current = currentList[idx];
                     if (current) updateEPG(current);
                 },
                 enter: function () {
@@ -197,7 +187,7 @@
                     });
                 },
                 back: function () {
-                    controller.focus(colG.find('.selector').eq(0));
+                    controller.focus($('.g .selector').eq(0));
                 }
             });
 
