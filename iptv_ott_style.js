@@ -2,24 +2,19 @@
     'use strict';
     if (!window.Lampa) return;
 
-/* =========================
-   CONFIG / STORAGE
-========================= */
+/* ========= STORAGE ========= */
 
-    const STORAGE = 'iptv_ott';
-    let cfg = Lampa.Storage.get(STORAGE, {
-        playlist_url: '',
-        epg_url: '',
-        last_channel: null
+    const KEY = 'iptv_ott';
+    let cfg = Lampa.Storage.get(KEY, {
+        playlist: '',
+        epg: ''
     });
 
     function save() {
-        Lampa.Storage.set(STORAGE, cfg);
+        Lampa.Storage.set(KEY, cfg);
     }
 
-/* =========================
-   SETTINGS UI
-========================= */
+/* ========= SETTINGS ========= */
 
     Lampa.Settings.add({
         title: 'IPTV (Ott style)',
@@ -29,76 +24,50 @@
     Lampa.Component.add('iptv_ott_settings', {
         template: `
         <div class="settings">
-            <div class="settings__item selector" data-type="playlist">
+            <div class="settings__item selector" data-t="playlist">
                 URL плейлиста
-                <div class="settings__value">${cfg.playlist_url || 'не задан'}</div>
+                <div class="settings__value">${cfg.playlist || 'не задан'}</div>
             </div>
-            <div class="settings__item selector" data-type="file">
-                Загрузить M3U файл
-            </div>
-            <div class="settings__item selector" data-type="epg">
-                URL EPG (xmltv)
-                <div class="settings__value">${cfg.epg_url || 'не задан'}</div>
+            <div class="settings__item selector" data-t="epg">
+                URL EPG
+                <div class="settings__value">${cfg.epg || 'не задан'}</div>
             </div>
         </div>
         `,
         start() {
             this.render().find('.settings__item').on('click', e => {
-                let type = e.currentTarget.dataset.type;
+                let t = e.currentTarget.dataset.t;
 
-                if (type === 'playlist') {
-                    Lampa.Input.edit({
-                        title: 'URL M3U',
-                        value: cfg.playlist_url,
-                        onBack: v => { cfg.playlist_url = v; save(); }
-                    });
-                }
-
-                if (type === 'epg') {
-                    Lampa.Input.edit({
-                        title: 'URL EPG',
-                        value: cfg.epg_url,
-                        onBack: v => { cfg.epg_url = v; save(); }
-                    });
-                }
-
-                if (type === 'file') {
-                    Lampa.Platform.openFile(file => {
-                        let r = new FileReader();
-                        r.onload = e => parseM3U(e.target.result);
-                        r.readAsText(file);
-                    });
-                }
+                Lampa.Input.edit({
+                    title: t === 'playlist' ? 'URL M3U' : 'URL EPG',
+                    value: cfg[t],
+                    onBack: v => { cfg[t] = v; save(); }
+                });
             });
 
             Lampa.Controller.enable('content');
         }
     });
 
-/* =========================
-   LOAD PLAYLIST
-========================= */
-
-    function loadPlaylist() {
-        if (!cfg.playlist_url) {
-            Lampa.Noty.show('Укажи плейлист');
-            return;
-        }
-        Lampa.Request.get(cfg.playlist_url, parseM3U);
-    }
+/* ========= LOAD ========= */
 
     Lampa.Settings.add({
         title: 'IPTV (просмотр)',
-        onClick: loadPlaylist
+        onClick() {
+            if (!cfg.playlist) {
+                Lampa.Noty.show('Укажи плейлист');
+                return;
+            }
+
+            Lampa.Request.get(cfg.playlist, parseM3U);
+        }
     });
 
-/* =========================
-   M3U PARSER
-========================= */
+/* ========= M3U ========= */
 
-    function parseM3U(text) {
-        let lines = text.split('\n');
-        let channels = [];
+    function parseM3U(txt) {
+        let lines = txt.split('\n');
+        let list = [];
         let cur = null;
 
         lines.forEach(l => {
@@ -114,39 +83,35 @@
                 };
             } else if (l && !l.startsWith('#') && cur) {
                 cur.url = l;
-                channels.push(cur);
+                list.push(cur);
                 cur = null;
             }
         });
 
-        openIPTV(channels);
+        openUI(list);
     }
 
-/* =========================
-   IPTV MAIN UI (OTT STYLE)
-========================= */
+/* ========= UI ========= */
 
-    function openIPTV(channels) {
+    function openUI(data) {
         Lampa.Activity.push({
             component: 'iptv_ott',
             title: 'IPTV',
-            data: channels
+            data
         });
     }
 
     Lampa.Component.add('iptv_ott', {
         template: `
-        <div class="iptv-ott">
-            <div class="iptv-left"></div>
-            <div class="iptv-center"></div>
-            <div class="iptv-right"></div>
+        <div class="iptv">
+            <div class="iptv-groups"></div>
+            <div class="iptv-channels"></div>
         </div>
         `,
         start() {
             let root = this.render();
-            let left = root.find('.iptv-left');
-            let center = root.find('.iptv-center');
-            let right = root.find('.iptv-right');
+            let gbox = root.find('.iptv-groups');
+            let cbox = root.find('.iptv-channels');
 
             let groups = {};
             this.params.data.forEach(c => {
@@ -154,58 +119,37 @@
                 groups[c.group].push(c);
             });
 
-            /* GROUPS */
             Object.keys(groups).forEach(g => {
-                let item = $(`<div class="selector iptv-group">${g}</div>`);
-                item.on('click', () => renderChannels(groups[g]));
-                left.append(item);
+                let gi = $(`<div class="selector">${g}</div>`);
+                gi.on('click', () => render(groups[g]));
+                gbox.append(gi);
             });
 
-            function renderChannels(list) {
-                center.empty();
+            function render(list) {
+                cbox.empty();
                 list.forEach(ch => {
-                    let c = $(`
-                        <div class="selector iptv-channel">
+                    let ci = $(`
+                        <div class="selector">
                             <img src="${ch.logo || ''}">
                             <span>${ch.title}</span>
                         </div>
                     `);
-                    c.on('click', () => play(ch));
-                    c.on('hover:focus', () => renderEPG(ch));
-                    center.append(c);
-                });
-            }
 
-            function play(ch) {
-                cfg.last_channel = ch;
-                save();
-
-                Lampa.Player.play({
-                    title: ch.title,
-                    url: ch.url,
-                    type: 'tv',
-                    epg: cfg.epg_url,
-                    epg_id: ch.epg
-                });
-            }
-
-            function renderEPG(ch) {
-                right.empty().append(`<div class="iptv-epg-title">${ch.title}</div>`);
-                if (!cfg.epg_url || !ch.epg) return;
-
-                Lampa.EPG.get(cfg.epg_url, ch.epg, list => {
-                    list.slice(0, 5).forEach(p => {
-                        right.append(`
-                            <div class="iptv-epg-item">
-                                <div>${p.start} – ${p.end}</div>
-                                <div>${p.title}</div>
-                            </div>
-                        `);
+                    ci.on('click', () => {
+                        Lampa.Player.play({
+                            title: ch.title,
+                            url: ch.url,
+                            type: 'tv',
+                            epg: cfg.epg || null,
+                            epg_id: ch.epg || null
+                        });
                     });
+
+                    cbox.append(ci);
                 });
             }
 
-            renderChannels(groups[Object.keys(groups)[0]]);
+            render(groups[Object.keys(groups)[0]]);
             Lampa.Controller.enable('content');
         }
     });
