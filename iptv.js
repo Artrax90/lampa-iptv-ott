@@ -1,6 +1,6 @@
 // ==Lampa==
-// name: IPTV Stable TV (ControllerCollection FIX)
-// version: 7.0.1
+// name: IPTV TV Stable (Samsung ES5)
+// version: 7.1.0
 // author: Artrax90
 // ==/Lampa==
 
@@ -17,7 +17,7 @@
         var colG = $('<div class="iptv-col g"></div>');
         var colC = $('<div class="iptv-col c"></div>');
         var colE = $('<div class="iptv-col e"></div>');
-        html.append(colG, colC, colE);
+        html.append(colG).append(colC).append(colE);
 
         var playlists = Lampa.Storage.get('iptv_pl', []);
         var active = Lampa.Storage.get('iptv_pl_a', 0);
@@ -32,25 +32,25 @@
             Lampa.Storage.set('iptv_pl_a', 0);
         }
 
-        if (!$('#iptv-cc-style').length) {
-            $('head').append(`
-            <style id="iptv-cc-style">
-            .iptv-root{display:flex;height:100vh;background:#0b0d10;color:#fff}
-            .iptv-col{overflow:auto}
-            .g{width:260px;padding:14px;background:#0e1116}
-            .c{flex:1;padding:18px}
-            .e{width:420px;padding:18px;background:#0e1116}
-            .item{padding:14px;border-radius:12px;margin-bottom:8px;background:#15181d}
-            .item.focus{background:#2962ff}
-            .chan{display:flex;align-items:center}
-            .logo{width:64px;height:36px;background:#000;border-radius:8px;margin-right:14px;display:flex;align-items:center;justify-content:center}
-            .logo img{max-width:100%;max-height:100%;object-fit:contain}
-            .name{font-size:1.05em}
-            .sub{font-size:.85em;color:#9aa0a6;margin-top:4px}
-            .et{font-size:1.2em;margin-bottom:10px}
-            .er{margin-bottom:8px;color:#cfcfcf}
-            </style>
-            `);
+        if (!$('#iptv-style-samsung').length) {
+            $('head').append(
+                '<style id="iptv-style-samsung">' +
+                '.iptv-root{display:flex;height:100vh;background:#0b0d10;color:#fff}' +
+                '.iptv-col{overflow:auto}' +
+                '.g{width:260px;padding:14px;background:#0e1116}' +
+                '.c{flex:1;padding:18px}' +
+                '.e{width:420px;padding:18px;background:#0e1116}' +
+                '.item{padding:14px;border-radius:12px;margin-bottom:8px;background:#15181d}' +
+                '.item.focus{background:#2962ff}' +
+                '.chan{display:flex;align-items:center}' +
+                '.logo{width:64px;height:36px;background:#000;border-radius:8px;margin-right:14px;display:flex;align-items:center;justify-content:center}' +
+                '.logo img{max-width:100%;max-height:100%;object-fit:contain}' +
+                '.name{font-size:1.05em}' +
+                '.sub{font-size:.85em;color:#9aa0a6;margin-top:4px}' +
+                '.et{font-size:1.2em;margin-bottom:10px}' +
+                '.er{margin-bottom:8px;color:#cfcfcf}' +
+                '</style>'
+            );
         }
 
         this.create = function () {
@@ -82,15 +82,17 @@
         function parseM3U(text) {
             groups = {};
             var cur = null;
+            var lines = text.split('\n');
 
-            text.split('\n').forEach(function (l) {
-                l = l.trim();
+            for (var i = 0; i < lines.length; i++) {
+                var l = $.trim(lines[i]);
+
                 if (l.indexOf('#EXTINF') === 0) {
                     cur = {
-                        name: (l.match(/,(.*)$/) || [,''])[1],
-                        id: (l.match(/tvg-id="([^"]+)"/i) || [,''])[1],
-                        logo: (l.match(/tvg-logo="([^"]+)"/i) || [,''])[1],
-                        group: (l.match(/group-title="([^"]+)"/i) || [,'ОБЩИЕ'])[1]
+                        name: (l.match(/,(.*)$/) || ['', ''])[1],
+                        id: (l.match(/tvg-id="([^"]+)"/i) || ['', ''])[1],
+                        logo: (l.match(/tvg-logo="([^"]+)"/i) || ['', ''])[1],
+                        group: (l.match(/group-title="([^"]+)"/i) || ['', 'ОБЩИЕ'])[1]
                     };
                 } else if (l.indexOf('http') === 0 && cur) {
                     cur.url = l;
@@ -98,7 +100,7 @@
                     groups[cur.group].push(cur);
                     cur = null;
                 }
-            });
+            }
 
             renderGroups();
         }
@@ -108,9 +110,9 @@
             colC.empty();
             colE.empty();
 
-            Object.keys(groups).forEach(function (g) {
+            for (var g in groups) {
                 colG.append('<div class="item selector" data-group="' + g + '">' + g + '</div>');
-            });
+            }
 
             initController();
         }
@@ -121,18 +123,17 @@
             currentList = list;
             current = null;
 
-            list.forEach(function (c, i) {
+            for (var i = 0; i < list.length; i++) {
+                var c = list[i];
                 var logo = c.logo || (c.id ? 'https://iptvx.one/logo/' + c.id + '.png' : 'https://bylampa.github.io/img/iptv.png');
-                colC.append(`
-                    <div class="item selector chan" data-index="${i}">
-                        <div class="logo"><img src="${logo}" onerror="this.src='https://bylampa.github.io/img/iptv.png'"></div>
-                        <div>
-                            <div class="name">${c.name}</div>
-                            <div class="sub">OK ▶</div>
-                        </div>
-                    </div>
-                `);
-            });
+
+                colC.append(
+                    '<div class="item selector chan" data-index="' + i + '">' +
+                    '<div class="logo"><img src="' + logo + '" onerror="this.src=\'https://bylampa.github.io/img/iptv.png\'"></div>' +
+                    '<div><div class="name">' + c.name + '</div><div class="sub">OK ▶</div></div>' +
+                    '</div>'
+                );
+            }
         }
 
         function updateEPG(c) {
@@ -172,7 +173,7 @@
                 selector: '.c',
                 children: '.selector',
                 focus: function (el) {
-                    var idx = parseInt(el.data('index'));
+                    var idx = parseInt(el.data('index'), 10);
                     current = currentList[idx];
                     if (current) updateEPG(current);
                 },
