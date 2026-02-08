@@ -1,6 +1,6 @@
 // ==Lampa==
 // name: IPTV PRO Final Fix
-// version: 11.4
+// version: 11.5
 // ==/Lampa==
 
 (function () {
@@ -12,7 +12,7 @@
         var groups_data = {};
         var all_channels = [];
         var current_list = [];
-        var active_col = 'groups'; 
+        var active_col = 'groups';
         var index_g = 0, index_c = 0;
 
         var storage_key = 'iptv_pro_v11';
@@ -115,6 +115,7 @@
             this.updateFocus();
         };
 
+        /* === ИСПРАВЛЕНИЕ ТУТ === */
         this.playlistMenu = function () {
             var html = $('<div></div>');
 
@@ -131,21 +132,24 @@
 
             var add = $('<div class="iptv-item">➕ Добавить плейлист</div>');
             add.on('click', function () {
-                Lampa.Input.edit({
-                    title: 'URL плейлиста',
-                    value: '',
-                    free: true
-                }, function (url) {
-                    if (!url) return;
-                    config.playlists.push({
-                        name: 'Playlist ' + config.playlists.length,
-                        url: url
+                Lampa.Modal.close();
+
+                setTimeout(function () {
+                    Lampa.Input.edit({
+                        title: 'URL плейлиста',
+                        value: '',
+                        free: true
+                    }, function (url) {
+                        if (!url) return;
+                        config.playlists.push({
+                            name: 'Playlist ' + config.playlists.length,
+                            url: url
+                        });
+                        config.current_pl_index = config.playlists.length - 1;
+                        Lampa.Storage.set(storage_key, config);
+                        _this.loadPlaylist();
                     });
-                    config.current_pl_index = config.playlists.length - 1;
-                    Lampa.Storage.set(storage_key, config);
-                    Lampa.Modal.close();
-                    _this.loadPlaylist();
-                });
+                }, 50);
             });
 
             html.append(add);
